@@ -6,6 +6,7 @@ package cli
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -36,6 +37,9 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(
 		newIngestCmd(g),
 		newCrawlCmd(g),
+		newBuildCmd(g),
+		newStatusCmd(g),
+		newDemoCmd(g),
 	)
 	return root
 }
@@ -43,6 +47,12 @@ func newRootCmd() *cobra.Command {
 // openStore opens the database named by --db.
 func (g *globals) openStore(ctx context.Context) (*store.Store, error) {
 	return store.Open(ctx, g.dbPath)
+}
+
+// dataDir is the folder holding the database. Hand-kept files (match
+// overrides) and generated ones (the review file) live beside it.
+func (g *globals) dataDir() string {
+	return filepath.Dir(g.dbPath)
 }
 
 // envOr returns the environment variable key, or fallback when it is unset.
