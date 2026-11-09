@@ -6,16 +6,22 @@ package cli
 import (
 	"context"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
-// Execute runs the command named on the command line.
+// Execute runs the command named on the command line. Ctrl-C or a SIGTERM
+// (which is how systemd stops a job) cancels the command's context, so
+// long-running commands save their current batch and exit cleanly.
 func Execute() error {
-	return newRootCmd().Execute()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return newRootCmd().ExecuteContext(ctx)
 }
 
 // globals are the flags every command shares.
@@ -40,6 +46,8 @@ func newRootCmd() *cobra.Command {
 		newCrawlCmd(g),
 		newBuildCmd(g),
 		newBacklogCmd(g),
+		newEmbedCmd(g),
+		newNightlyCmd(g),
 		newStatusCmd(g),
 		newDemoCmd(g),
 	)
