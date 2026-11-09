@@ -15,7 +15,7 @@ OverDrive Thunder API ─► internal/sources/overdrive ─────┴─►
                        recbook build:  resolve (records → works)  ◄────────┘
                                        signals (dates, labels, tiers)
                                                    │
-                       queries:        backlog (later: similarity search)
+                       queries:        search, similar, backlog
 ```
 
 - **The contract** ([internal/contract](internal/contract)) is the canonical
@@ -39,6 +39,10 @@ go run ./cmd/recbook ingest libby        data/exports/libby-timeline.json
 go run ./cmd/recbook ingest librarything data/exports/librarything.json
 go run ./cmd/recbook crawl --library lasvegas        # the key in libbyapp.com/library/<key>
 go run ./cmd/recbook build
+go run ./cmd/recbook embed                           # on the GPU; the nightly job keeps it current
+
+go run ./cmd/recbook search cold war berlin --available-now
+go run ./cmd/recbook similar --seed "tinker tailor" --seed "red october" --max-wait 14
 go run ./cmd/recbook backlog --available-now
 ```
 
@@ -76,6 +80,9 @@ and lists every problem.
 | `textkey` | title and author matching keys |
 | `resolve` | matches records into works |
 | `signals` | trusted dates, labels, provenance, signal tiers |
+| `library` | the one recording of each work to offer, and its availability |
+| `search` | keyword (BM25) search, and finding works by name |
+| `recommend` | books like a set of seeds, from the content vectors |
 | `backlog` | owned or wanted books the library can lend |
 | `blurb`, `embed`, `ollama` | clean descriptions, embed them, run the local model |
 | `nightly` | the night window and GPU guard |
