@@ -21,7 +21,7 @@ func newBuildCmd(g *globals) *cobra.Command {
 		Use:   "build",
 		Short: "Rebuild works, labels and tiers from everything ingested and crawled",
 		Long: "Rebuild every derived table from the contract tables: match records into\n" +
-			"works, then derive dates, labels, provenance and tiers. Safe to rerun; it\n" +
+			"works, then derive dates, labels and tiers. Safe to rerun; it\n" +
 			"never changes ingested data.\n\n" +
 			"Reads <data dir>/match_overrides.csv if present and writes the matches\n" +
 			"worth checking to <data dir>/review/matches.csv, where <data dir> is the\n" +
@@ -85,19 +85,14 @@ func printSignals(ctx context.Context, st *store.Store, out io.Writer) error {
 	}
 	tw.Flush()
 
-	rates, err := signals.Provenance(ctx, st)
-	if err != nil || len(rates) == 0 {
+	loans, err := signals.Loans(ctx, st)
+	if err != nil || loans.Borrowed == 0 {
 		return err
 	}
-	fmt.Fprintln(out)
-	tw = tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "borrowed via\tworks\toutcome known\tfinished")
-	for _, r := range rates {
-		rate := "-"
-		if r.Labeled > 0 {
-			rate = fmt.Sprintf("%d (%.0f%%)", r.Finished, 100*float64(r.Finished)/float64(r.Labeled))
-		}
-		fmt.Fprintf(tw, "%s\t%d\t%d\t%s\n", r.Provenance, r.Borrowed, r.Labeled, rate)
+	fmt.Fprintf(out, "\nlibrary loans: %d works borrowed, %d with a known outcome", loans.Borrowed, loans.Labeled)
+	if loans.Labeled > 0 {
+		fmt.Fprintf(out, ", %d finished (%.0f%%)", loans.Finished, 100*float64(loans.Finished)/float64(loans.Labeled))
 	}
-	return tw.Flush()
+	fmt.Fprintln(out)
+	return nil
 }

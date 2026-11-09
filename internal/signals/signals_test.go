@@ -30,34 +30,33 @@ func TestRunOnTheDemo(t *testing.T) {
 	}
 
 	tests := []struct {
-		ref, why                      string
-		tier, label, conf, provenance string // "" means NULL
+		ref, why          string
+		tier, label, conf string // "" means NULL
 	}{
-		{"reading_app:ra-1", "finished, bought three months later", "T1", "1", "high", ""},
-		{"reading_app:ra-2", "finished and owned, purchase undated", "T2", "1", "high", ""},
-		{"reading_app:ra-6", "finished; the purchase date is a batch date, so the order is unknown", "T2", "1", "high", ""},
-		{"reading_app:ra-3", "finished, borrowed off the list", "T3", "1", "high", "to_read_list"},
-		{"owned_books:ob-3", "owned, never finished", "T4", "", "", ""},
-		{"reading_app:ra-4", "only wanted", "T5", "", "", ""},
-		{"reading_app:ra-5", "wanted, borrowed, ran out", "T5", "0", "low", "to_read_list"},
-		{"library_loans:9002", "returned early; never listed, which isn't proof of browsing", "N", "0", "high", "unknown"},
-		{"library_loans:9004", "renewed and never finished, listed months later", "T5", "", "", "search"},
-		{"library_loans:9006", "borrowed long ago, no return recorded", "", "0", "low", "unknown"},
-		{"library_loans:9005", "a hold only", "", "", "", ""},
+		{"reading_app:ra-1", "finished, bought afterward (no longer its own tier)", "T2", "1", "high"},
+		{"reading_app:ra-2", "finished and owned", "T2", "1", "high"},
+		{"reading_app:ra-3", "finished", "T3", "1", "high"},
+		{"owned_books:ob-3", "owned, never finished", "T4", "", ""},
+		{"reading_app:ra-4", "only wanted", "T5", "", ""},
+		{"reading_app:ra-5", "wanted, borrowed, ran out", "T5", "0", "low"},
+		{"library_loans:9002", "returned early", "N", "0", "high"},
+		{"library_loans:9004", "renewed and never finished", "T5", "", ""},
+		{"library_loans:9006", "borrowed long ago, no return recorded", "", "0", "low"},
+		{"library_loans:9005", "a hold only", "", "", ""},
 	}
 	for _, tt := range tests {
-		var tier, label, conf, prov sql.NullString
+		var tier, label, conf sql.NullString
 		err := st.DB().QueryRow(`
-			SELECT s.tier, CAST(s.label AS VARCHAR), s.label_confidence, s.provenance
+			SELECT s.tier, CAST(s.label AS VARCHAR), s.label_confidence
 			FROM work_signal s JOIN work_record w USING (work_id) WHERE w.ref = ?`, tt.ref).
-			Scan(&tier, &label, &conf, &prov)
+			Scan(&tier, &label, &conf)
 		if err != nil {
 			t.Fatalf("%s: %v", tt.ref, err)
 		}
-		got := [4]string{tier.String, label.String, conf.String, prov.String}
-		want := [4]string{tt.tier, tt.label, tt.conf, tt.provenance}
+		got := [3]string{tier.String, label.String, conf.String}
+		want := [3]string{tt.tier, tt.label, tt.conf}
 		if got != want {
-			t.Errorf("%s (%s): tier, label, confidence, provenance = %q, want %q", tt.ref, tt.why, got, want)
+			t.Errorf("%s (%s): tier, label, confidence = %q, want %q", tt.ref, tt.why, got, want)
 		}
 	}
 
@@ -68,12 +67,12 @@ func TestRunOnTheDemo(t *testing.T) {
 	}
 
 	tiers, err := Tiers(ctx, st)
-	if err != nil || len(tiers) != 6 || tiers[len(tiers)-1].Tier != "N" {
+	if err != nil || len(tiers) != 5 || tiers[0].Tier != "T2" || tiers[len(tiers)-1].Tier != "N" {
 		t.Errorf("Tiers = %+v, %v", tiers, err)
 	}
-	rates, err := Provenance(ctx, st)
-	if err != nil || len(rates) != 3 {
-		t.Errorf("Provenance = %+v, %v", rates, err)
+	loans, err := Loans(ctx, st)
+	if err != nil || loans != (LoanOutcomes{Borrowed: 5, Labeled: 4, Finished: 1}) {
+		t.Errorf("Loans = %+v, %v", loans, err)
 	}
 }
 

@@ -1,13 +1,16 @@
 // Package signals turns my history into judgments (spec §2 and §10): which
-// dates to trust, and for each work its label (did it hold my attention?),
-// its signal tier (how strongly it says "my taste"), and, for borrows,
-// whether it came off the to-read list or from browsing.
+// dates to trust, and for each work its label (did it hold my attention?)
+// and its signal tier (how strongly it says "my taste").
+//
+// The spec's provenance analysis (to-read list vs. browsing) is left out:
+// it needs to know when a book was added to the to-read list, and none of
+// the sources record that.
 //
 // It rebuilds these tables, after resolve has built the works:
 //
 //	history      every shelf event with its work and a judged date  (history.sql)
 //	tier         the tiers, their meaning and seed weights          (signals.sql)
-//	work_signal  per-work facts, label, provenance, tier, weight    (signals.sql)
+//	work_signal  per-work facts, label, tier, seed weight           (signals.sql)
 package signals
 
 import (
@@ -31,10 +34,6 @@ type Options struct {
 	// fall on the same day before they count as a catch-up batch. Default 5.
 	BatchMin int
 
-	// OrderGapDays is how far apart two trusted dates must be to say which
-	// came first. Default 30.
-	OrderGapDays int
-
 	// LoanDays is the longest a loan runs. A borrow older than this with no
 	// recorded return is taken to be over. Default 21, Libby's longest loan.
 	LoanDays int
@@ -45,13 +44,10 @@ func Run(ctx context.Context, st *store.Store, opts Options) error {
 	if opts.BatchMin == 0 {
 		opts.BatchMin = 5
 	}
-	if opts.OrderGapDays == 0 {
-		opts.OrderGapDays = 30
-	}
 	if opts.LoanDays == 0 {
 		opts.LoanDays = 21
 	}
-	vars := store.Vars{"batch_min": opts.BatchMin, "order_gap_days": opts.OrderGapDays, "loan_days": opts.LoanDays}
+	vars := store.Vars{"batch_min": opts.BatchMin, "loan_days": opts.LoanDays}
 
 	if err := st.RunScript(ctx, historySQL, vars); err != nil {
 		return fmt.Errorf("signals history: %w", err)
@@ -91,33 +87,18 @@ func Tiers(ctx context.Context, st *store.Store) ([]TierCount, error) {
 	return out, rows.Err()
 }
 
-// ProvenanceRate is how borrows from one provenance turned out: the first
-// analysis in spec §10, testing whether to-read-list borrows get finished
-// more often than ones found while browsing.
-type ProvenanceRate struct {
-	Provenance string
-	Borrowed   int // works borrowed
-	Labeled    int // ...whose outcome is known
-	Finished   int // ...and that I finished
+// LoanOutcomes is how my library loans turned out.
+type LoanOutcomes struct {
+	Borrowed int // works borrowed
+	Labeled  int // ...whose outcome is known
+	Finished int // ...and that I finished
 }
 
-// Provenance returns finish rates by provenance.
-func Provenance(ctx context.Context, st *store.Store) ([]ProvenanceRate, error) {
-	rows, err := st.DB().QueryContext(ctx, `
-		SELECT provenance, count(*), count(label), count(*) FILTER (label = 1)
-		FROM work_signal WHERE provenance IS NOT NULL
-		GROUP BY provenance ORDER BY provenance`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []ProvenanceRate
-	for rows.Next() {
-		var p ProvenanceRate
-		if err := rows.Scan(&p.Provenance, &p.Borrowed, &p.Labeled, &p.Finished); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
+// Loans counts library loans by outcome.
+func Loans(ctx context.Context, st *store.Store) (LoanOutcomes, error) {
+	var o LoanOutcomes
+	err := st.DB().QueryRowContext(ctx, `
+		SELECT count(*), count(label), count(*) FILTER (label = 1)
+		FROM work_signal WHERE borrows > 0`).Scan(&o.Borrowed, &o.Labeled, &o.Finished)
+	return o, err
 }

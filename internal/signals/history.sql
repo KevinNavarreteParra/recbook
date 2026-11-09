@@ -7,7 +7,8 @@
 -- session, not the day anything happened.
 --
 -- trusted_on is the date when it can be used for ordering (system or user
--- quality), and NULL otherwise.
+-- quality), and NULL otherwise. Nothing ranks on typed-in dates today; the
+-- judged dates are here so questions about them can be asked of the data.
 CREATE OR REPLACE TABLE history AS
 WITH e AS (
     SELECT wr.work_id, ev.source, ev.item_id, ev.kind, ev.happened_on, ev.date_quality, ev.detail
