@@ -7,7 +7,7 @@
     "summary": "The Lighthouse Keeper's Ledger by Ada Fenwick (2021)",
     "subject": {"0": ["Lighthouses", "Fiction"], "2": ["Coasts"]}, "genre": ["Fiction", "General Fiction"],
     "series": ["Northern Coast"], "language_codeA": ["eng"]},
-  "900002": {"books_id": "900002", "title": "Collected Tides", "primaryauthor": "June Okafor", "primaryauthorrole": "Editor",
+  "900002": {"books_id": "900002", "title": "Okafor&#039;s Collected Tides &amp; Songs", "primaryauthor": "June Okafor", "primaryauthorrole": "Editor",
     "authors": [{"lf": "Okafor, June", "fl": "June Okafor", "role": "Editor"}],
     "workcode": "55502", "entrydate": "2025-02-23", "date": "1999", "subject": [["Tides"], ["Poetry", "Collections"]],
     "isbn": ["9798999900043", "not-an-isbn"],

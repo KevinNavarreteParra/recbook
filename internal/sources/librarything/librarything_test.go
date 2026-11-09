@@ -47,6 +47,9 @@ func TestRead(t *testing.T) {
 	}
 
 	collected := shelf.Items[1]
+	if collected.Title != "Okafor's Collected Tides & Songs" {
+		t.Errorf("HTML entities should be unescaped: %q", collected.Title)
+	}
 	if !slices.Equal(collected.Subjects, []string{"Tides", "Poetry -- Collections"}) {
 		t.Errorf("subjects given as a list = %q", collected.Subjects)
 	}

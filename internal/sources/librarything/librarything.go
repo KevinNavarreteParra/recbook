@@ -13,6 +13,8 @@
 //     detection discards the batched ones.
 //   - "summary" is generated ("Title by Author (year)"), so it isn't kept
 //     as a description.
+//   - Titles and names are HTML-escaped ("Shakespeare&#039;s",
+//     "M&eacute;xico"); they're unescaped here.
 //
 // DDC and LCC classifications are left out until the genre view needs them;
 // re-ingesting the export brings them in.
@@ -21,6 +23,7 @@ package librarything
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"slices"
 	"strconv"
@@ -76,7 +79,7 @@ func Read(r io.Reader) (*contract.Shelf, error) {
 		b := books[id]
 		item := contract.ShelfItem{
 			ID:       id,
-			Title:    strings.TrimSpace(b.Title),
+			Title:    clean(b.Title),
 			Authors:  authorsOf(b),
 			ISBNs:    isbnsOf(b),
 			Format:   formatOf(b),
@@ -119,11 +122,11 @@ func authorsOf(b book) []string {
 		}
 		switch a.Role {
 		case "", "Author", "Autor":
-			out = append(out, strings.TrimSpace(a.LF))
+			out = append(out, clean(a.LF))
 		}
 	}
 	if len(out) == 0 && b.PrimaryAuthor != "" {
-		out = []string{b.PrimaryAuthor}
+		out = []string{clean(b.PrimaryAuthor)}
 	}
 	if len(out) == 0 {
 		out = []string{"Unknown"}
@@ -177,7 +180,7 @@ func formatOf(b book) contract.Format {
 func subjectsOf(b book) []string {
 	var out []string
 	add := func(s string) {
-		if s = strings.TrimSpace(s); s != "" && !slices.Contains(out, s) {
+		if s = clean(s); s != "" && !slices.Contains(out, s) {
 			out = append(out, s)
 		}
 	}
@@ -211,6 +214,11 @@ func headings(raw json.RawMessage) [][]string {
 		out = append(out, asMap[k])
 	}
 	return out
+}
+
+// clean undoes LibraryThing's HTML escaping and trims space.
+func clean(s string) string {
+	return strings.TrimSpace(html.UnescapeString(s))
 }
 
 func firstOr(s []string, fallback string) string {
