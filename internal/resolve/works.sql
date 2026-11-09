@@ -20,8 +20,8 @@ GROUP BY w.work_id;
 --                 how a wrong edge chaining two books together shows up
 CREATE OR REPLACE TABLE match_review AS
 SELECT e.method AS reason, round(e.score, 3) AS score,
-       e.a, ra.title AS a_title, ra.author AS a_author,
-       e.b, rb.title AS b_title, rb.author AS b_author
+       e.a, ra.title || coalesce(': ' || ra.subtitle, '') AS a_title, ra.author AS a_author,
+       e.b, rb.title || coalesce(': ' || rb.subtitle, '') AS b_title, rb.author AS b_author
 FROM match_edge e
 JOIN record ra ON ra.ref = e.a
 JOIN record rb ON rb.ref = e.b
