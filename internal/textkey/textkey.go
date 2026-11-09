@@ -86,8 +86,9 @@ var (
 
 	suffixes = map[string]bool{"jr": true, "sr": true, "ii": true, "iii": true, "iv": true, "phd": true, "md": true}
 
-	// keys of non-people: "Anonymous", "Various", "Unknown", "Various Authors".
-	placeholderAuthors = map[string]bool{"anonymous": true, "various": true, "unknown": true, "authors v": true}
+	// keys of non-people: "Anonymous" (and the French "Anonyme"), "Various",
+	// "Unknown", "Various Authors".
+	placeholderAuthors = map[string]bool{"anonymous": true, "anonyme": true, "various": true, "unknown": true, "authors v": true}
 
 	// letters that don't decompose into a base letter plus an accent.
 	ligatures = strings.NewReplacer("ß", "ss", "æ", "ae", "œ", "oe", "ø", "o", "ł", "l", "đ", "d", "þ", "th", "ı", "i")

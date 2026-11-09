@@ -10,6 +10,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -18,7 +19,7 @@ import (
 	"slices"
 	"strings"
 
-	_ "github.com/duckdb/duckdb-go/v2" // registers the "duckdb" database/sql driver
+	duckdb "github.com/duckdb/duckdb-go/v2" // also registers the "duckdb" database/sql driver
 )
 
 // Store is an open recbook database.
@@ -72,6 +73,36 @@ func (s *Store) RunScript(ctx context.Context, script string, vars Vars) error {
 		}
 		_, err := tx.ExecContext(ctx, script)
 		return err
+	})
+}
+
+// AppendRows bulk-loads rows into an existing table through DuckDB's
+// appender, which is far faster than INSERT for big batches. rows calls add
+// once per row, with values in the table's column order.
+func (s *Store) AppendRows(ctx context.Context, table string, rows func(add func(values ...any) error) error) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	return conn.Raw(func(driverConn any) error {
+		app, err := duckdb.NewAppenderFromConn(driverConn.(driver.Conn), "", table)
+		if err != nil {
+			return fmt.Errorf("appending to %s: %w", table, err)
+		}
+		add := func(values ...any) error {
+			row := make([]driver.Value, len(values))
+			for i, v := range values {
+				row[i] = v
+			}
+			return app.AppendRow(row...)
+		}
+		if err := rows(add); err != nil {
+			app.Close()
+			return err
+		}
+		return app.Close() // flushes
 	})
 }
 
