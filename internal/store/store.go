@@ -76,18 +76,26 @@ func (s *Store) RunScript(ctx context.Context, script string, vars Vars) error {
 	})
 }
 
+// Rows produces a table's rows for bulk loading: it calls add once per row,
+// with values in the table's column order.
+type Rows func(add func(values ...any) error) error
+
 // AppendRows bulk-loads rows into an existing table through DuckDB's
-// appender, which is far faster than INSERT for big batches. rows calls add
-// once per row, with values in the table's column order.
-func (s *Store) AppendRows(ctx context.Context, table string, rows func(add func(values ...any) error) error) error {
+// appender, which is far faster than INSERT for big batches.
+func (s *Store) AppendRows(ctx context.Context, table string, rows Rows) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
+	return appendRows(conn, "", table, rows)
+}
 
+// appendRows bulk-loads rows into catalog.table on conn. An empty catalog
+// means the database itself; temporary tables live in catalog "temp".
+func appendRows(conn *sql.Conn, catalog, table string, rows Rows) error {
 	return conn.Raw(func(driverConn any) error {
-		app, err := duckdb.NewAppenderFromConn(driverConn.(driver.Conn), "", table)
+		app, err := duckdb.NewAppender(driverConn.(driver.Conn), catalog, "", table)
 		if err != nil {
 			return fmt.Errorf("appending to %s: %w", table, err)
 		}

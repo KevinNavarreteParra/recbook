@@ -74,3 +74,12 @@ func subjectList(ss []contract.Subject) []map[string]any {
 	}
 	return out
 }
+
+// day binds a Day to a DATE column: unknown becomes NULL. (Day implements
+// driver.Valuer for queries, but the appender takes plain values.)
+func day(d contract.Day) any {
+	if d.IsZero() {
+		return nil
+	}
+	return d.Time()
+}

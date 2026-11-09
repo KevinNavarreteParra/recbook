@@ -16,24 +16,10 @@ func (s *Store) ReplaceShelf(ctx context.Context, source, file string, shelf *co
 	if err := shelf.Validate(); err != nil {
 		return err
 	}
-	return s.inTx(ctx, func(tx *sql.Tx) error {
-		for _, table := range []string{"shelf_event", "shelf_item"} {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE source = ?", source); err != nil {
-				return err
-			}
-		}
 
-		insertItem, err := tx.PrepareContext(ctx, `INSERT INTO shelf_item (
-			source, item_id, title, subtitle, authors, isbns, format, refs,
-			description, subjects, series, series_index, language, pub_year, pages
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-		if err != nil {
-			return err
-		}
-		defer insertItem.Close()
+	items := func(add func(...any) error) error {
 		for _, it := range shelf.Items {
-			_, err := insertItem.ExecContext(ctx,
-				source, it.ID, it.Title, nullString(it.Subtitle), list(it.Authors), isbn13s(it.ISBNs),
+			err := add(source, it.ID, it.Title, nullString(it.Subtitle), list(it.Authors), isbn13s(it.ISBNs),
 				string(it.Format), refMap(it.Refs), nullString(it.Description), list(it.Subjects),
 				nullString(it.Series), nullString(it.SeriesIndex), nullString(it.Language),
 				nullInt(it.PubYear), nullInt(it.Pages))
@@ -41,27 +27,34 @@ func (s *Store) ReplaceShelf(ctx context.Context, source, file string, shelf *co
 				return err
 			}
 		}
-
-		insertEvent, err := tx.PrepareContext(ctx, `INSERT INTO shelf_event (
-			source, item_id, kind, happened_on, date_quality, detail
-		) VALUES (?, ?, ?, ?, ?, ?)`)
-		if err != nil {
-			return err
-		}
-		defer insertEvent.Close()
+		return nil
+	}
+	events := func(add func(...any) error) error {
 		for _, ev := range shelf.Events {
 			quality := ev.DateQuality
 			if ev.On.IsZero() {
 				quality = contract.DateMissing
 			}
-			_, err := insertEvent.ExecContext(ctx,
-				source, ev.ItemID, string(ev.Kind), ev.On, string(quality), nullString(ev.Detail))
-			if err != nil {
+			if err := add(source, ev.ItemID, string(ev.Kind), day(ev.On), string(quality), nullString(ev.Detail)); err != nil {
 				return err
 			}
 		}
+		return nil
+	}
 
-		_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO shelf_import VALUES (?, ?, ?, ?, ?)`,
+	return s.writeStaged(ctx, []stage{{"shelf_item", items}, {"shelf_event", events}}, func(tx *sql.Tx) error {
+		for _, table := range []string{"shelf_event", "shelf_item"} {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE source = ?", source); err != nil {
+				return err
+			}
+		}
+		if err := execAll(ctx, tx,
+			`INSERT INTO shelf_item FROM temp.stage_shelf_item`,
+			`INSERT INTO shelf_event FROM temp.stage_shelf_event`,
+		); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO shelf_import VALUES (?, ?, ?, ?, ?)`,
 			source, file, time.Now().UTC(), len(shelf.Items), len(shelf.Events))
 		return err
 	})

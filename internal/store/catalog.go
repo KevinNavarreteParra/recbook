@@ -19,29 +19,10 @@ func (s *Store) SaveCatalog(ctx context.Context, library string, titles []contra
 	}
 	fetchedAt := time.Now().UTC()
 
-	return s.inTx(ctx, func(tx *sql.Tx) error {
-		upsert, err := tx.PrepareContext(ctx, `INSERT INTO catalog_title (
-			library, title_id, title, subtitle, creators, isbns, format, edition, publisher,
-			published_on, language, description, subjects, series, series_index, duration_min,
-			refs, cover_url, url, first_seen_at, last_seen_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (library, title_id) DO UPDATE SET
-			title = excluded.title, subtitle = excluded.subtitle, creators = excluded.creators,
-			isbns = excluded.isbns, format = excluded.format, edition = excluded.edition,
-			publisher = excluded.publisher, published_on = excluded.published_on,
-			language = excluded.language, description = excluded.description,
-			subjects = excluded.subjects, series = excluded.series,
-			series_index = excluded.series_index, duration_min = excluded.duration_min,
-			refs = excluded.refs, cover_url = excluded.cover_url, url = excluded.url,
-			last_seen_at = excluded.last_seen_at`)
-		if err != nil {
-			return err
-		}
-		defer upsert.Close()
+	titleRows := func(add func(...any) error) error {
 		for _, t := range titles {
-			_, err := upsert.ExecContext(ctx,
-				library, t.ID, t.Title, nullString(t.Subtitle), creatorList(t.Creators), isbn13s(t.ISBNs),
-				string(t.Format), nullString(t.Edition), nullString(t.Publisher), t.PublishedOn,
+			err := add(library, t.ID, t.Title, nullString(t.Subtitle), creatorList(t.Creators), isbn13s(t.ISBNs),
+				string(t.Format), nullString(t.Edition), nullString(t.Publisher), day(t.PublishedOn),
 				nullString(t.Language), nullString(t.Description), subjectList(t.Subjects),
 				nullString(t.Series), nullString(t.SeriesIndex), nullInt(t.DurationMin),
 				refMap(t.Refs), nullString(t.CoverURL), nullString(t.URL), seenAt, seenAt)
@@ -49,20 +30,33 @@ func (s *Store) SaveCatalog(ctx context.Context, library string, titles []contra
 				return err
 			}
 		}
-
-		insertAvail, err := tx.PrepareContext(ctx, `INSERT INTO availability VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-		if err != nil {
-			return err
-		}
-		defer insertAvail.Close()
+		return nil
+	}
+	availRows := func(add func(...any) error) error {
 		for _, a := range avail {
-			_, err := insertAvail.ExecContext(ctx, library, a.TitleID, fetchedAt,
-				a.Available, a.CopiesOwned, a.CopiesAvailable, a.Holds, a.WaitDays)
+			var wait any
+			if a.WaitDays != nil {
+				wait = int32(*a.WaitDays)
+			}
+			err := add(library, a.TitleID, fetchedAt, a.Available,
+				int32(a.CopiesOwned), int32(a.CopiesAvailable), int32(a.Holds), wait)
 			if err != nil {
 				return err
 			}
 		}
 		return nil
+	}
+
+	stages := []stage{{"catalog_title", titleRows}, {"availability", availRows}}
+	return s.writeStaged(ctx, stages, func(tx *sql.Tx) error {
+		return execAll(ctx, tx,
+			// Upsert, keeping first_seen_at from the existing row when there is one.
+			`INSERT OR REPLACE INTO catalog_title
+			 SELECT new.* REPLACE (coalesce(old.first_seen_at, new.first_seen_at) AS first_seen_at)
+			 FROM temp.stage_catalog_title new
+			 LEFT JOIN catalog_title old USING (library, title_id)`,
+			`INSERT INTO availability FROM temp.stage_availability`,
+		)
 	})
 }
 
