@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -82,8 +83,22 @@ func embedWorks(ctx context.Context, st *store.Store, opts embedOptions, out io.
 		return embed.Report{}, err
 	}
 
+	// Report every 30s, estimating from the rate since the last report: the
+	// first batches are slow while the model loads.
+	lastReport, lastDone := time.Now(), 0
+	progress := func(done, total int) {
+		elapsed := time.Since(lastReport)
+		if elapsed < 30*time.Second {
+			return
+		}
+		rate := float64(done-lastDone) / elapsed.Seconds()
+		lastReport, lastDone = time.Now(), done
+		left := time.Duration(float64(total-done)/rate) * time.Second
+		fmt.Fprintf(out, "embed: %d of %d (%.0f/s, about %s left)\n", done, total, rate, left.Round(time.Minute))
+	}
+
 	rep, err := embed.Run(ctx, st, server, embed.Options{
-		Model: model, Prefix: opts.prefix, Limit: opts.limit,
+		Model: model, Prefix: opts.prefix, Limit: opts.limit, Progress: progress,
 		Between: func(ctx context.Context) error {
 			vram, err := server.VRAMBytes(ctx)
 			if err != nil {

@@ -52,6 +52,10 @@ type Options struct {
 	// Between, if set, runs before each batch. An error stops the run
 	// cleanly; the nightly job uses it to back off when the GPU gets busy.
 	Between func(ctx context.Context) error
+
+	// Progress, if set, is called after each batch with how many texts this
+	// run has embedded and how many it set out to.
+	Progress func(done, total int)
 }
 
 // Report summarizes a run.
@@ -124,6 +128,9 @@ func Run(ctx context.Context, st *store.Store, e Embedder, opts Options) (Report
 			return rep, fmt.Errorf("saving embeddings: %w", err)
 		}
 		rep.Embedded += len(batch)
+		if opts.Progress != nil {
+			opts.Progress(rep.Embedded, len(todo))
+		}
 	}
 	rep.Left = len(todo) - rep.Embedded
 	return rep, nil
