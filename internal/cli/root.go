@@ -31,6 +31,7 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true, // print usage for flag mistakes, not for runtime errors
 		SilenceErrors: false,
 	}
+	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringVar(&g.dbPath, "db", envOr("RECBOOK_DB", "data/recbook.duckdb"),
 		"DuckDB database file (env RECBOOK_DB)")
 
@@ -38,6 +39,7 @@ func newRootCmd() *cobra.Command {
 		newIngestCmd(g),
 		newCrawlCmd(g),
 		newBuildCmd(g),
+		newBacklogCmd(g),
 		newStatusCmd(g),
 		newDemoCmd(g),
 	)
