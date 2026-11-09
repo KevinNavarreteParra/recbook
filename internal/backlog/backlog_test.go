@@ -48,7 +48,7 @@ func TestList(t *testing.T) {
 		// available now: owned (T4) before wanted (T5)
 		"Ethics", "The Brothers Karamazov", "The Spy Who Came in from the Cold",
 		// then by wait
-		"Meditations", "A Gentleman in Moscow", "The Republic",
+		"Meditations", "A Gentleman in Moscow", "The Republic", "Gone Girl",
 	}
 	if !slices.Equal(all, want) {
 		t.Errorf("backlog =\n  %q\nwant\n  %q", all, want)

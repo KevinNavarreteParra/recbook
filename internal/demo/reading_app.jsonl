@@ -4,6 +4,7 @@
 {"item": {"id": "ra-4", "title": "A Gentleman in Moscow", "authors": ["Amor Towles"], "format": "print"}}
 {"item": {"id": "ra-5", "title": "The Spy Who Came in from the Cold", "authors": ["John le Carré"], "format": "print"}}
 {"item": {"id": "ra-6", "title": "Crime and Punishment", "authors": ["Fyodor Dostoevsky"], "format": "print"}}
+{"item": {"id": "ra-7", "title": "Gone Girl", "authors": ["Gillian Flynn"], "format": "unknown"}}
 {"event": {"item_id": "ra-1", "kind": "finished", "on": "2022-03-10", "date_quality": "user"}}
 {"event": {"item_id": "ra-2", "kind": "finished", "on": "2021-05-03", "date_quality": "user"}}
 {"event": {"item_id": "ra-3", "kind": "wanted", "on": "2020-06-01", "date_quality": "user"}}
@@ -11,3 +12,4 @@
 {"event": {"item_id": "ra-4", "kind": "wanted", "on": "2024-02-01", "date_quality": "user"}}
 {"event": {"item_id": "ra-5", "kind": "wanted", "on": "2024-05-01", "date_quality": "user"}}
 {"event": {"item_id": "ra-6", "kind": "finished", "on": "2019-11-01", "date_quality": "user"}}
+{"event": {"item_id": "ra-7", "kind": "wanted", "on": "2023-09-01", "date_quality": "user"}}

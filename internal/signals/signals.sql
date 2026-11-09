@@ -25,8 +25,12 @@ WITH facts AS (
         count(*) FILTER (kind = 'borrowed')                          AS borrows,
         count(*) FILTER (kind = 'renewed')                           AS renewals,
         bool_or(kind = 'returned' AND detail = 'early')              AS returned_early,
-        -- expired, or the source can't tell an early return from an expiry
-        bool_or(kind = 'returned' AND coalesce(detail, '') <> 'early') AS ran_out,
+        -- The loan has ended: a return was recorded, or the latest borrow is
+        -- older than a loan lasts. Libby records no returns at all, so for
+        -- its loans the second test is the only one that applies.
+        bool_or(kind = 'returned')
+            OR date_diff('day', max(happened_on) FILTER (kind = 'borrowed'), current_date)
+               > getvariable('loan_days')                            AS loan_over,
         min(trusted_on) FILTER (kind = 'finished')                   AS finished_on,
         min(trusted_on) FILTER (kind = 'acquired')                   AS acquired_on,
         min(trusted_on) FILTER (kind = 'wanted')                     AS wanted_on,
@@ -42,18 +46,22 @@ judged AS (
         CASE
             WHEN finished THEN 1
             WHEN abandoned OR returned_early THEN 0
-            WHEN borrows = 1 AND renewals = 0 AND ran_out THEN 0
-            -- Renewed or re-borrowed but never finished is ambiguous: no label.
+            WHEN borrows = 1 AND renewals = 0 AND loan_over THEN 0
+            -- Renewed or re-borrowed but never finished is ambiguous, and a
+            -- loan still running has no outcome yet: no label.
         END AS label,
         CASE
             WHEN finished OR abandoned OR returned_early THEN 'high'
-            WHEN borrows = 1 AND renewals = 0 AND ran_out THEN 'low'  -- the loan may just have run out on me
+            -- Low: the loan may just have run out on me.
+            WHEN borrows = 1 AND renewals = 0 AND loan_over THEN 'low'
         END AS label_confidence,
 
-        -- Provenance: was it borrowed off the to-read list, or found while browsing?
+        -- Provenance: was it borrowed off the to-read list, or found while
+        -- browsing? Only dated wanted events can say. No wanted event is not
+        -- evidence of browsing, because a reading app may forget a book was
+        -- on its to-read list once it's started (Reading List does).
         CASE
             WHEN borrows = 0 THEN NULL
-            WHEN NOT wanted THEN 'search'
             WHEN wanted_on IS NULL OR first_borrowed_on IS NULL THEN 'unknown'
             WHEN date_diff('day', wanted_on, first_borrowed_on) >= getvariable('order_gap_days') THEN 'to_read_list'
             WHEN date_diff('day', first_borrowed_on, wanted_on) >= getvariable('order_gap_days') THEN 'search'

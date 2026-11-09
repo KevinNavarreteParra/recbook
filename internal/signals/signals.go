@@ -34,6 +34,10 @@ type Options struct {
 	// OrderGapDays is how far apart two trusted dates must be to say which
 	// came first. Default 30.
 	OrderGapDays int
+
+	// LoanDays is the longest a loan runs. A borrow older than this with no
+	// recorded return is taken to be over. Default 21, Libby's longest loan.
+	LoanDays int
 }
 
 // Run rebuilds the signal tables.
@@ -44,7 +48,10 @@ func Run(ctx context.Context, st *store.Store, opts Options) error {
 	if opts.OrderGapDays == 0 {
 		opts.OrderGapDays = 30
 	}
-	vars := store.Vars{"batch_min": opts.BatchMin, "order_gap_days": opts.OrderGapDays}
+	if opts.LoanDays == 0 {
+		opts.LoanDays = 21
+	}
+	vars := store.Vars{"batch_min": opts.BatchMin, "order_gap_days": opts.OrderGapDays, "loan_days": opts.LoanDays}
 
 	if err := st.RunScript(ctx, historySQL, vars); err != nil {
 		return fmt.Errorf("signals history: %w", err)

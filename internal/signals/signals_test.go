@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
+	"github.com/KevinNavarreteParra/recbook/internal/contract"
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
@@ -38,8 +40,9 @@ func TestRunOnTheDemo(t *testing.T) {
 		{"owned_books:ob-3", "owned, never finished", "T4", "", "", ""},
 		{"reading_app:ra-4", "only wanted", "T5", "", "", ""},
 		{"reading_app:ra-5", "wanted, borrowed, ran out", "T5", "0", "low", "to_read_list"},
-		{"library_loans:9002", "returned early", "N", "0", "high", "search"},
-		{"library_loans:9004", "renewed and never finished", "", "", "", "search"},
+		{"library_loans:9002", "returned early; never listed, which isn't proof of browsing", "N", "0", "high", "unknown"},
+		{"library_loans:9004", "renewed and never finished, listed months later", "T5", "", "", "search"},
+		{"library_loans:9006", "borrowed long ago, no return recorded", "", "0", "low", "unknown"},
 		{"library_loans:9005", "a hold only", "", "", "", ""},
 	}
 	for _, tt := range tests {
@@ -69,7 +72,38 @@ func TestRunOnTheDemo(t *testing.T) {
 		t.Errorf("Tiers = %+v, %v", tiers, err)
 	}
 	rates, err := Provenance(ctx, st)
-	if err != nil || len(rates) != 2 {
+	if err != nil || len(rates) != 3 {
 		t.Errorf("Provenance = %+v, %v", rates, err)
+	}
+}
+
+// A loan that is still running has no outcome yet, so no label.
+func TestRunningLoanHasNoLabel(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	shelf := &contract.Shelf{
+		Items: []contract.ShelfItem{{ID: "1", Title: "On Loan", Authors: []string{"Ada Fenwick"}, Format: contract.Audiobook}},
+		Events: []contract.ShelfEvent{{ItemID: "1", Kind: contract.Borrowed,
+			On: contract.DayOf(time.Now().AddDate(0, 0, -5)), DateQuality: contract.DateSystem}},
+	}
+	if err := st.ReplaceShelf(ctx, "libby", "test", shelf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolve.Run(ctx, st, resolve.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(ctx, st, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	var label sql.NullInt64
+	if err := st.DB().QueryRow(`SELECT label FROM work_signal`).Scan(&label); err != nil {
+		t.Fatal(err)
+	}
+	if label.Valid {
+		t.Errorf("a five-day-old loan got label %d", label.Int64)
 	}
 }

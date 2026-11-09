@@ -4,9 +4,10 @@
 // Three shelves, in the JSONL contract format, play the roles of the real
 // sources: a reading app (finishes and to-read), an owned-books catalog,
 // and a library's loan history. Between them they cover every signal tier,
-// a batch-entered date, and each kind of match. The catalog (catalog.go)
-// holds audiobooks of most of those books plus a few unread ones. The
-// ISBNs are valid but invented.
+// a batch-entered date, a loan with no recorded return (as Libby exports
+// them), and each kind of match. The catalog (catalog.go) holds audiobooks
+// of most of those books plus a few unread ones. The ISBNs are valid but
+// invented.
 package demo
 
 import (
