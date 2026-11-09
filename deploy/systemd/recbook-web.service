@@ -1,0 +1,27 @@
+# The private web app. Installed by `make web-install`; reach it over
+# Tailscale (`tailscale serve`), since it listens on localhost only.
+[Unit]
+Description=recbook web app (private; reached over Tailscale)
+After=network.target
+
+[Service]
+WorkingDirectory=%h/utilities/recbook
+ExecStart=%h/utilities/recbook/bin/recbook serve --addr 127.0.0.1:8484
+Restart=on-failure
+RestartSec=5
+Nice=5
+
+# A sandbox: the app sees only the data folder (it writes the tracker
+# file there), its own binary, and DuckDB's extensions. The rest of home
+# (SSH keys, GitHub and password-manager tokens, other repos) doesn't
+# exist inside it, so a bug in the app can't reach them.
+ProtectHome=tmpfs
+BindPaths=%h/utilities/recbook/data
+BindReadOnlyPaths=%h/utilities/recbook/bin %h/.duckdb
+ProtectSystem=strict
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target

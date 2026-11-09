@@ -51,6 +51,18 @@ in `data/match_overrides.csv`, and `build` lists matches worth checking in
 `data/review/matches.csv`. There is no CI workflow: run `make check` before
 pushing.
 
+## Web app
+
+`recbook serve` runs a private web app on 127.0.0.1:8484. It has search as
+you type, recommendations from seeds or "more like this", the backlog, and a
+tracker with listening / finished / gave up / want buttons on every book.
+It reads the copy of the database that `build`, `embed` and the nightly job
+publish, and writes only `data/tracker.jsonl`, which the next build loads
+like any other source. `make web-install` runs it as a sandboxed systemd
+user service. To reach it over Tailscale, run
+`tailscale serve --bg --http=8484 http://127.0.0.1:8484` as the Tailscale
+operator.
+
 ## Nightly job
 
 `recbook nightly` re-crawls the catalog once a week, rebuilds, and embeds
@@ -86,5 +98,6 @@ and lists every problem.
 | `backlog` | owned or wanted books the library can lend |
 | `blurb`, `embed`, `ollama` | clean descriptions, embed them, run the local model |
 | `nightly` | the night window and GPU guard |
+| `web` | the web app and its tracker |
 | `demo` | synthetic data for tests and `recbook demo` |
 | `cli` | one file per command |
