@@ -14,6 +14,7 @@ import (
 
 	"github.com/KevinNavarreteParra/recbook/internal/contract"
 	"github.com/KevinNavarreteParra/recbook/internal/sources/jsonl"
+	"github.com/KevinNavarreteParra/recbook/internal/sources/libby"
 	"github.com/KevinNavarreteParra/recbook/internal/sources/readinglist"
 )
 
@@ -32,6 +33,7 @@ type ShelfSource struct {
 // ShelfSources is every shelf source recbook knows.
 var ShelfSources = []ShelfSource{
 	{Name: "readinglist", About: "Reading List (iOS) CSV export: finished, started, to-read", Read: readinglist.Read},
+	{Name: "libby", About: "Libby timeline JSON export: borrows", Read: libby.Read},
 	{Name: "jsonl", About: "the contract itself, one JSON record per line (see internal/sources/jsonl)", Read: jsonl.Read},
 }
 
