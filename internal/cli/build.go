@@ -13,6 +13,7 @@ import (
 
 	"github.com/KevinNavarreteParra/recbook/internal/library"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
+	"github.com/KevinNavarreteParra/recbook/internal/search"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
@@ -20,10 +21,11 @@ import (
 func newBuildCmd(g *globals) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build",
-		Short: "Rebuild works, labels and tiers from everything ingested and crawled",
+		Short: "Rebuild works, labels, tiers and the search index from everything ingested",
 		Long: "Rebuild every derived table from the contract tables: match records into\n" +
-			"works, then derive dates, labels and tiers. Safe to rerun; it\n" +
-			"never changes ingested data.\n\n" +
+			"works, derive dates, labels and tiers, pick the recording to offer for each\n" +
+			"work, and index everything for search. Safe to rerun; it never changes\n" +
+			"ingested data.\n\n" +
 			"Reads <data dir>/match_overrides.csv if present and writes the matches\n" +
 			"worth checking to <data dir>/review/matches.csv, where <data dir> is the\n" +
 			"folder holding the database.",
@@ -54,6 +56,9 @@ func build(ctx context.Context, st *store.Store, dataDir string, out io.Writer) 
 		return err
 	}
 	if err := library.Build(ctx, st); err != nil {
+		return err
+	}
+	if err := search.Build(ctx, st); err != nil {
 		return err
 	}
 

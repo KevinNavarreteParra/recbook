@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"database/sql"
 	"fmt"
 	"text/tabwriter"
 
@@ -38,7 +39,8 @@ func newBacklogCmd(g *globals) *cobra.Command {
 			fmt.Fprintln(tw, "tier\ttitle\tauthor\tnarrator\tlength\tavailability\tlink")
 			for _, e := range entries {
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					e.Tier, e.Title, e.Author, e.Narrator, length(e), availability(e), e.URL)
+					e.Tier, e.Title, e.Author, e.Narrator, hoursMinutes(e.DurationMin, e.Abridged),
+					availabilityText(e.Available, e.WaitDays, e.Holds), e.URL)
 			}
 			return tw.Flush()
 		},
@@ -49,23 +51,26 @@ func newBacklogCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
-func length(e backlog.Entry) string {
-	if !e.DurationMin.Valid {
+// hoursMinutes formats a running time, flagging versions that aren't the
+// full text.
+func hoursMinutes(minutes sql.NullInt64, abridged bool) string {
+	if !minutes.Valid {
 		return ""
 	}
-	s := fmt.Sprintf("%dh%02d", e.DurationMin.Int64/60, e.DurationMin.Int64%60)
-	if e.Abridged {
+	s := fmt.Sprintf("%dh%02d", minutes.Int64/60, minutes.Int64%60)
+	if abridged {
 		s += " (abridged)"
 	}
 	return s
 }
 
-func availability(e backlog.Entry) string {
+// availabilityText says when a title can be borrowed.
+func availabilityText(available bool, waitDays, holds sql.NullInt64) string {
 	switch {
-	case e.Available:
+	case available:
 		return "now"
-	case e.WaitDays.Valid:
-		return fmt.Sprintf("~%d days (%d holds)", e.WaitDays.Int64, e.Holds.Int64)
+	case waitDays.Valid:
+		return fmt.Sprintf("~%d days (%d holds)", waitDays.Int64, holds.Int64)
 	default:
 		return "unknown"
 	}
