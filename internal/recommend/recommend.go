@@ -66,6 +66,7 @@ type Seed struct {
 // Rec is one recommendation.
 type Rec struct {
 	WorkID      int64
+	TitleID     string // the recording's catalog id
 	Title       string
 	Author      string
 	Narrator    string
@@ -215,7 +216,7 @@ func neighbours(ctx context.Context, db *sql.DB, vector []float32, exclude []int
 	for rows.Next() {
 		var r Rec
 		var author, narrator, url, tier sql.NullString
-		err := rows.Scan(&r.WorkID, &r.Title, &author, &narrator, &r.DurationMin, &r.Abridged,
+		err := rows.Scan(&r.WorkID, &r.TitleID, &r.Title, &author, &narrator, &r.DurationMin, &r.Abridged,
 			&r.Available, &r.WaitDays, &r.Holds, &url, &tier, &r.Similarity)
 		if err != nil {
 			return nil, err

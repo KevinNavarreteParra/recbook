@@ -67,3 +67,21 @@ func TestDemoFilesAreValid(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteRoundTrips(t *testing.T) {
+	in := &contract.Shelf{
+		Items:  []contract.ShelfItem{{ID: "1", Title: "Dune", Authors: []string{"Frank Herbert"}, Format: contract.Audiobook}},
+		Events: []contract.ShelfEvent{{ItemID: "1", Kind: contract.Finished, On: contract.NewDay(2026, 11, 9), DateQuality: contract.DateSystem}},
+	}
+	var buf strings.Builder
+	if err := Write(&buf, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Read(strings.NewReader(buf.String()))
+	if err != nil {
+		t.Fatalf("%v\n%s", err, buf.String())
+	}
+	if len(out.Items) != 1 || out.Items[0].Title != "Dune" || len(out.Events) != 1 || out.Events[0].On != in.Events[0].On {
+		t.Errorf("round trip changed the shelf:\n%s", buf.String())
+	}
+}

@@ -49,6 +49,7 @@ type Query struct {
 // Result is one work found, in the recording the library would lend.
 type Result struct {
 	WorkID      int64
+	TitleID     string // the recording's catalog id
 	Title       string
 	Subtitle    string
 	Author      string
@@ -85,7 +86,7 @@ func Search(ctx context.Context, st *store.Store, q Query) ([]Result, error) {
 	for rows.Next() {
 		var r Result
 		var subtitle, author, narrator, url, tier sql.NullString
-		err := rows.Scan(&r.WorkID, &r.Title, &subtitle, &author, &narrator, &r.DurationMin, &r.Abridged,
+		err := rows.Scan(&r.WorkID, &r.TitleID, &r.Title, &subtitle, &author, &narrator, &r.DurationMin, &r.Abridged,
 			&r.Available, &r.WaitDays, &r.Holds, &url, &tier, &r.Score)
 		if err != nil {
 			return nil, err

@@ -23,6 +23,8 @@ type Options struct {
 
 // Entry is one backlog book, in its most borrowable edition.
 type Entry struct {
+	WorkID      int64
+	TitleID     string // the recording's catalog id
 	Tier        string // T4 (owned) or T5 (wanted)
 	Title       string
 	Author      string
@@ -54,7 +56,7 @@ func List(ctx context.Context, st *store.Store, opts Options) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		var author, narrator, url sql.NullString
-		err := rows.Scan(&e.Tier, &e.Title, &author, &narrator, &e.Available,
+		err := rows.Scan(&e.WorkID, &e.TitleID, &e.Tier, &e.Title, &author, &narrator, &e.Available,
 			&e.WaitDays, &e.Holds, &e.DurationMin, &e.Abridged, &url)
 		if err != nil {
 			return nil, err

@@ -22,8 +22,8 @@ import (
 
 // line is one record. Exactly one of its fields must be set.
 type line struct {
-	Item  *contract.ShelfItem  `json:"item"`
-	Event *contract.ShelfEvent `json:"event"`
+	Item  *contract.ShelfItem  `json:"item,omitempty"`
+	Event *contract.ShelfEvent `json:"event,omitempty"`
 }
 
 // Read parses a JSONL shelf. Blank lines are skipped; unknown fields are an
@@ -57,4 +57,21 @@ func Read(r io.Reader) (*contract.Shelf, error) {
 		return nil, err
 	}
 	return shelf, nil
+}
+
+// Write writes a shelf in the format Read reads: every item, then every
+// event. The tracker in internal/web saves its state this way.
+func Write(w io.Writer, shelf *contract.Shelf) error {
+	enc := json.NewEncoder(w)
+	for i := range shelf.Items {
+		if err := enc.Encode(line{Item: &shelf.Items[i]}); err != nil {
+			return err
+		}
+	}
+	for i := range shelf.Events {
+		if err := enc.Encode(line{Event: &shelf.Events[i]}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

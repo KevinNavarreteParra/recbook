@@ -13,7 +13,7 @@ WITH hit AS (
     FROM search_doc
 )
 SELECT
-    b.work_id, b.title, b.subtitle, b.author, b.narrator, b.duration_min, b.abridged,
+    b.work_id, b.title_id, b.title, b.subtitle, b.author, b.narrator, b.duration_min, b.abridged,
     b.available, b.wait_days, b.holds, b.url, s.tier,
     hit.s_all + 2 * coalesce(hit.s_title, 0) + 2 * coalesce(hit.s_author, 0)
         + 4 * coalesce(hit.s_every, 0) AS score

@@ -1,7 +1,7 @@
 -- The borrowable works most like one seed in the content view. Vectors are
 -- unit length, so their inner product is the cosine similarity.
 SELECT
-    b.work_id, b.title, b.author, b.narrator, b.duration_min, b.abridged,
+    b.work_id, b.title_id, b.title, b.author, b.narrator, b.duration_min, b.abridged,
     b.available, b.wait_days, b.holds, b.url, s.tier,
     list_inner_product(e.vector, $seed::FLOAT[]) AS similarity
 FROM borrowable b
