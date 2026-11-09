@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/search"
@@ -59,6 +60,10 @@ func build(ctx context.Context, st *store.Store, dataDir string, out io.Writer) 
 		return err
 	}
 	if err := search.Build(ctx, st); err != nil {
+		return err
+	}
+	// Works were renumbered, so the embedded texts must follow them.
+	if _, err := embed.WriteTexts(ctx, st); err != nil {
 		return err
 	}
 

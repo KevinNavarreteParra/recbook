@@ -73,9 +73,9 @@ func embedWorks(ctx context.Context, st *store.Store, opts embedOptions, out io.
 
 	model := opts.model
 	if model == "" {
-		model = "nomic-embed-text"
+		model = embed.DefaultModel
 		if opts.prefix == "" {
-			opts.prefix = "clustering: "
+			opts.prefix = embed.DefaultPrefix
 		}
 	}
 	fmt.Fprintf(out, "embed: making sure %s is downloaded\n", model)
@@ -110,8 +110,8 @@ func embedWorks(ctx context.Context, st *store.Store, opts embedOptions, out io.
 	if err != nil {
 		return rep, err
 	}
-	fmt.Fprintf(out, "embed: %d works described (%d thin); %d texts were already embedded, %d embedded now, %d left\n",
-		rep.Works, rep.Thin, rep.Cached, rep.Embedded, rep.Left)
+	fmt.Fprintf(out, "embed: %d works described (%d thin); embedded %d texts, %d left\n",
+		rep.Works, rep.Thin, rep.Embedded, rep.Left)
 	if rep.Stopped != nil {
 		fmt.Fprintln(out, "embed: stopped early:", rep.Stopped)
 	}

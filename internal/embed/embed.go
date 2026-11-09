@@ -1,8 +1,9 @@
 // Package embed builds the content view (spec §6): one vector per work,
 // from its title and cleaned blurb, computed by a local model.
 //
-// A run rebuilds work_text (the text chosen for each work, work_text.sql)
-// and then embeds whatever text the embedding cache doesn't hold yet,
+// It has two steps. WriteTexts rebuilds work_text, the text chosen for each
+// work; `recbook build` runs it, because every build renumbers works. Run
+// then embeds whatever text the embedding cache doesn't hold yet,
 // committing after every batch. Stopping it partway (the context is
 // cancelled, or Between returns an error) loses at most one batch, and the
 // next run carries on from there.
@@ -26,6 +27,15 @@ var (
 	describeSQL string
 	//go:embed work_text.sql
 	workTextSQL string
+	//go:embed pending.sql
+	pendingSQL string
+)
+
+// DefaultModel and DefaultPrefix are the embedding model and the task
+// prefix it expects when documents are compared with each other.
+const (
+	DefaultModel  = "nomic-embed-text"
+	DefaultPrefix = "clustering: "
 )
 
 // Embedder turns texts into unit-length vectors; *ollama.Client is one.
@@ -35,13 +45,10 @@ type Embedder interface {
 
 // Options tunes a run.
 type Options struct {
-	// Model is the embedding model's name. Default nomic-embed-text.
-	Model string
-
-	// Prefix is put in front of every text, for models trained with task
-	// prefixes. Default "clustering: ", which is what nomic-embed-text
-	// expects when documents are compared with each other.
-	Prefix string
+	// Model is the embedding model's name, and Prefix is put in front of
+	// every text for models trained with task prefixes. Both default to
+	// DefaultModel and DefaultPrefix.
+	Model, Prefix string
 
 	// BatchSize is how many texts go to the model at once. Default 32.
 	BatchSize int
@@ -58,11 +65,15 @@ type Options struct {
 	Progress func(done, total int)
 }
 
+// Texts summarizes work_text.
+type Texts struct {
+	Works int // works with a description
+	Thin  int // ...whose blurb is too short to say much
+}
+
 // Report summarizes a run.
 type Report struct {
-	Works    int   // works with a description
-	Thin     int   // ...whose blurb is too short to say much
-	Cached   int   // distinct texts already embedded before this run
+	Texts
 	Embedded int   // distinct texts embedded by this run
 	Left     int   // distinct texts still to embed
 	Stopped  error // why the run ended early, if it did
@@ -71,18 +82,22 @@ type Report struct {
 // Run rebuilds work_text and embeds any text not yet in the cache.
 func Run(ctx context.Context, st *store.Store, e Embedder, opts Options) (Report, error) {
 	if opts.Model == "" {
-		opts.Model, opts.Prefix = "nomic-embed-text", "clustering: "
+		opts.Model, opts.Prefix = DefaultModel, DefaultPrefix
 	}
 	if opts.BatchSize == 0 {
 		opts.BatchSize = 32
 	}
 
 	var rep Report
-	todo, err := writeWorkTexts(ctx, st, opts.Model, &rep)
-	if err != nil {
+	var err error
+	if rep.Texts, err = WriteTexts(ctx, st); err != nil {
 		if ctx.Err() != nil { // the window closed before there was anything to embed
 			return Report{Stopped: ctx.Err()}, nil
 		}
+		return rep, err
+	}
+	todo, err := pendingTexts(ctx, st.DB(), opts.Model)
+	if err != nil {
 		return rep, err
 	}
 
@@ -136,23 +151,18 @@ func Run(ctx context.Context, st *store.Store, e Embedder, opts Options) (Report
 	return rep, nil
 }
 
-// pending is a text the cache doesn't hold yet.
-type pending struct{ text, hash string }
-
-// writeWorkTexts chooses and cleans each work's text, rebuilds work_text,
-// and returns the distinct texts still to embed, seeds first.
-func writeWorkTexts(ctx context.Context, st *store.Store, model string, rep *Report) ([]pending, error) {
+// WriteTexts chooses and cleans each work's text and rebuilds work_text.
+func WriteTexts(ctx context.Context, st *store.Store) (Texts, error) {
 	type row struct {
-		workID     int64
-		side, text string
-		hash       string
-		thin       bool
+		workID           int64
+		side, text, hash string
+		thin             bool
 	}
 	var rows []row
 
 	q, err := st.DB().QueryContext(ctx, describeSQL)
 	if err != nil {
-		return nil, err
+		return Texts{}, err
 	}
 	for q.Next() {
 		var r row
@@ -160,7 +170,7 @@ func writeWorkTexts(ctx context.Context, st *store.Store, model string, rep *Rep
 		var onShelf bool
 		if err := q.Scan(&r.workID, &title, &description, &r.side, &onShelf); err != nil {
 			q.Close()
-			return nil, err
+			return Texts{}, err
 		}
 		cleaned := blurb.Clean(description)
 		r.text = title + ". " + cleaned
@@ -170,61 +180,44 @@ func writeWorkTexts(ctx context.Context, st *store.Store, model string, rep *Rep
 	}
 	q.Close()
 	if err := q.Err(); err != nil {
-		return nil, err
+		return Texts{}, err
 	}
 
 	if err := st.RunScript(ctx, workTextSQL, nil); err != nil {
-		return nil, err
+		return Texts{}, err
 	}
+	var t Texts
 	err = st.AppendRows(ctx, "work_text", func(add func(...any) error) error {
 		for _, r := range rows {
 			if err := add(r.workID, r.side, r.text, r.hash, r.thin); err != nil {
 				return err
 			}
+			t.Works++
+			if r.thin {
+				t.Thin++
+			}
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	cached, err := cachedHashes(ctx, st.DB(), model)
-	if err != nil {
-		return nil, err
-	}
-	var todo []pending
-	seen := map[string]bool{}
-	for _, r := range rows {
-		rep.Works++
-		if r.thin {
-			rep.Thin++
-		}
-		if seen[r.hash] {
-			continue
-		}
-		seen[r.hash] = true
-		if cached[r.hash] {
-			rep.Cached++
-			continue
-		}
-		todo = append(todo, pending{text: r.text, hash: r.hash})
-	}
-	return todo, nil
+	return t, err
 }
 
-func cachedHashes(ctx context.Context, db *sql.DB, model string) (map[string]bool, error) {
-	rows, err := db.QueryContext(ctx, `SELECT text_hash FROM embedding WHERE model = ?`, model)
+// pending is a text the cache doesn't hold yet.
+type pending struct{ hash, text string }
+
+func pendingTexts(ctx context.Context, db *sql.DB, model string) ([]pending, error) {
+	rows, err := db.QueryContext(ctx, pendingSQL, sql.Named("model", model))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]bool{}
+	var out []pending
 	for rows.Next() {
-		var h string
-		if err := rows.Scan(&h); err != nil {
+		var p pending
+		if err := rows.Scan(&p.hash, &p.text); err != nil {
 			return nil, err
 		}
-		out[h] = true
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }

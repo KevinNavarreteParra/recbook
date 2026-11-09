@@ -82,12 +82,41 @@ func TestRunEmbedsOnceAndResumes(t *testing.T) {
 
 	// The next run embeds only what's left, then nothing.
 	rep, err = Run(ctx, st, f, Options{})
-	if err != nil || rep.Cached != 1 || rep.Embedded != 2 || rep.Left != 0 {
+	if err != nil || rep.Embedded != 2 || rep.Left != 0 {
 		t.Fatalf("resumed run: %+v, %v", rep, err)
 	}
 	rep, err = Run(ctx, st, f, Options{})
-	if err != nil || rep.Embedded != 0 || rep.Cached != 3 {
+	if err != nil || rep.Embedded != 0 || rep.Left != 0 {
 		t.Fatalf("third run should find everything cached: %+v, %v", rep, err)
+	}
+
+	// A new record that sorts first shifts every work id on the next build.
+	// work_text is stale until WriteTexts rebuilds it; the cached vectors
+	// still apply because they're keyed by text.
+	early := &contract.Shelf{Items: []contract.ShelfItem{{ID: "1", Title: "Aardvarks", Authors: []string{"Ada Fenwick"}, Format: contract.Print}}}
+	if err := st.ReplaceShelf(ctx, "aaa", "test", early); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolve.Run(ctx, st, resolve.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	stale := func() int {
+		var n int
+		st.DB().QueryRow(`SELECT count(*) FROM work_text t JOIN work w USING (work_id)
+			WHERE NOT starts_with(t.text, w.title)`).Scan(&n)
+		return n
+	}
+	if stale() == 0 {
+		t.Fatal("test setup: the new record should have shifted the work ids")
+	}
+	if _, err := WriteTexts(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	if n := stale(); n != 0 {
+		t.Errorf("%d work_text rows point at the wrong work after WriteTexts", n)
+	}
+	if rep, _ := Run(ctx, st, f, Options{}); rep.Embedded != 0 {
+		t.Errorf("renumbering shouldn't cause re-embedding: %+v", rep)
 	}
 
 	for _, in := range f.inputs {
