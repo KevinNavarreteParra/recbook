@@ -41,10 +41,10 @@
       {{with .Subtitle}}<div class="sub">{{.}}</div>{{end}}
       {{with .Why}}<div class="why">{{.}}</div>{{end}}
     </td>
-    <td>{{.Author}}</td>
+    <td class="author">{{.Author}}</td>
     <td class="narrator">{{.Narrator}}</td>
-    <td class="nowrap">{{.Length}}</td>
-    <td class="nowrap{{if .Available}} now{{end}}">{{.Availability}}</td>
+    <td class="len nowrap">{{.Length}}</td>
+    <td class="avail nowrap{{if .Available}} now{{end}}">{{.Availability}}</td>
     <td class="mine">{{.Mine}}</td>
     <td class="do">
       <a class="more" href="/similar?seed={{.WorkID}}">More like this</a>

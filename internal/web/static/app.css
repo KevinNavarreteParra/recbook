@@ -84,9 +84,16 @@ table.results { width: 100%; border-collapse: collapse; }
 
 .htmx-request { opacity: .6; transition: opacity .2s; }
 
-/* On a phone: drop the narrator column, let the table scroll if it must. */
+/* On a phone each row becomes a card: title, then author · length ·
+   availability on one line, then the buttons. */
 @media (max-width: 700px) {
-  .narrator { display: none; }
-  main { padding: 12px; overflow-x: auto; }
-  .do { min-width: 0; }
+  main { padding: 12px; }
+  table.results, .results tbody, .results tr { display: block; }
+  .results thead, .results .narrator, .results td:empty { display: none; }
+  .results tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .results td { display: block; border: none; padding: 1px 0; }
+  .results td.author, .results td.len, .results td.avail, .results td.mine { display: inline; }
+  .results td.len::before, .results td.avail::before, .results td.mine::before { content: " · "; color: var(--muted); }
+  .results td.mine:empty { display: none; }
+  .do { min-width: 0; margin-top: 4px; }
 }

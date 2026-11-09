@@ -451,8 +451,16 @@ func availability(available bool, waitDays, holds sql.NullInt64) string {
 	case available:
 		return "now"
 	case waitDays.Valid:
-		return fmt.Sprintf("~%d days, %d holds", waitDays.Int64, holds.Int64)
+		return fmt.Sprintf("~%d days, %s", waitDays.Int64, plural(holds.Int64, "hold"))
 	default:
 		return "unknown"
 	}
+}
+
+// plural writes a count and a noun, adding an "s" unless the count is 1.
+func plural(n int64, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
