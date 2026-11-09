@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/search"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
+	"github.com/KevinNavarreteParra/recbook/internal/sources/jsonl"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
@@ -37,14 +39,20 @@ func newBuildCmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			return build(cmd.Context(), st, g.dataDir(), cmd.OutOrStdout())
+			return build(cmd.Context(), st, g, cmd.OutOrStdout())
 		},
 	}
 	return cmd
 }
 
-// build runs every derived-table stage in order and prints what it found.
-func build(ctx context.Context, st *store.Store, dataDir string, out io.Writer) error {
+// build folds in the web app's tracker marks, runs every derived-table
+// stage in order, publishes the copy the web app reads, and prints what it
+// found.
+func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) error {
+	dataDir := g.dataDir()
+	if err := ingestTracker(ctx, st, g.trackerPath()); err != nil {
+		return err
+	}
 	reviewFile := filepath.Join(dataDir, "review", "matches.csv")
 	rep, err := resolve.Run(ctx, st, resolve.Options{
 		OverridesFile: filepath.Join(dataDir, "match_overrides.csv"),
@@ -65,6 +73,9 @@ func build(ctx context.Context, st *store.Store, dataDir string, out io.Writer) 
 	// Works were renumbered, so the embedded texts must follow them.
 	if _, err := embed.WriteTexts(ctx, st); err != nil {
 		return err
+	}
+	if err := st.Snapshot(ctx, g.servePath()); err != nil {
+		return fmt.Errorf("publishing for the web app: %w", err)
 	}
 
 	methods := make([]string, 0, len(rep.EdgesByMethod))
@@ -109,4 +120,22 @@ func printSignals(ctx context.Context, st *store.Store, out io.Writer) error {
 	}
 	fmt.Fprintln(out)
 	return nil
+}
+
+// ingestTracker loads the web app's tracker file, if there is one, as the
+// shelf source "tracker". It's the contract's JSONL, like any other source.
+func ingestTracker(ctx context.Context, st *store.Store, path string) error {
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	shelf, err := jsonl.Read(f)
+	if err != nil {
+		return fmt.Errorf("tracker %s: %w", path, err)
+	}
+	return st.ReplaceShelf(ctx, "tracker", path, shelf)
 }

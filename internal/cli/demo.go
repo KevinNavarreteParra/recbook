@@ -33,7 +33,7 @@ func newDemoCmd(g *globals) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "loaded the demo into %s\n\n", g.dbPath)
-			if err := build(ctx, st, g.dataDir(), out); err != nil {
+			if err := build(ctx, st, g, out); err != nil {
 				return err
 			}
 			fmt.Fprintf(out, "\nnext: recbook --db %s backlog\n", g.dbPath)

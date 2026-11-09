@@ -27,8 +27,9 @@ func newNightlyCmd(g *globals) *cobra.Command {
 		Short: "The scheduled job: refresh the catalog, rebuild, embed, within a night window",
 		Long: "Run the nightly upkeep, but only inside --window, stopping when it closes:\n\n" +
 			"  1. crawl the catalog again, if the last full crawl is older than --crawl-every\n" +
-			"  2. rebuild the derived tables\n" +
-			"  3. embed whatever isn't embedded yet, on the GPU, if it's free\n\n" +
+			"  2. rebuild the derived tables, folding in the web app's tracker marks\n" +
+			"  3. embed whatever isn't embedded yet, on the GPU, if it's free\n" +
+			"  4. publish the result for the web app\n\n" +
 			"Every step saves as it goes, so whatever a night doesn't finish, the next\n" +
 			"night continues. Outside the window it does nothing. A systemd timer runs\n" +
 			"it (deploy/systemd).",
@@ -59,9 +60,18 @@ func newNightlyCmd(g *globals) *cobra.Command {
 				run  func() error
 			}{
 				{"crawl", func() error { return crawlIfDue(ctx, st, library, crawlEvery, out) }},
-				{"build", func() error { return build(ctx, st, g.dataDir(), io.Discard) }},
+				{"build", func() error { return build(ctx, st, g, io.Discard) }},
 				{"embed", func() error { _, err := embedWorks(ctx, st, emb, out); return err }},
 			}
+			// Whatever happens, publish what was done for the web app. The
+			// window may have closed, so this gets a little time of its own.
+			defer func() {
+				publish, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				if err := st.Snapshot(publish, g.servePath()); err != nil {
+					fmt.Fprintln(out, "nightly: publishing for the web app:", err)
+				}
+			}()
 			for _, step := range steps {
 				err := step.run()
 				if ctx.Err() != nil {

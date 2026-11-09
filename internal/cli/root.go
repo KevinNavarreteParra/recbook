@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -48,6 +49,7 @@ func newRootCmd() *cobra.Command {
 		newBacklogCmd(g),
 		newSearchCmd(g),
 		newSimilarCmd(g),
+		newServeCmd(g),
 		newEmbedCmd(g),
 		newNightlyCmd(g),
 		newStatusCmd(g),
@@ -65,6 +67,17 @@ func (g *globals) openStore(ctx context.Context) (*store.Store, error) {
 // overrides) and generated ones (the review file) live beside it.
 func (g *globals) dataDir() string {
 	return filepath.Dir(g.dbPath)
+}
+
+// servePath is where the read-only copy for the web app is published:
+// data/recbook.duckdb → data/recbook.serve.duckdb.
+func (g *globals) servePath() string {
+	return strings.TrimSuffix(g.dbPath, ".duckdb") + ".serve.duckdb"
+}
+
+// trackerPath is the web app's tracker file, a shelf in JSONL.
+func (g *globals) trackerPath() string {
+	return filepath.Join(g.dataDir(), "tracker.jsonl")
 }
 
 // envOr returns the environment variable key, or fallback when it is unset.

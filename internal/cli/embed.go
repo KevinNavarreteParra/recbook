@@ -34,8 +34,10 @@ func newEmbedCmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			_, err = embedWorks(cmd.Context(), st, opts, cmd.OutOrStdout())
-			return err
+			if _, err := embedWorks(cmd.Context(), st, opts, cmd.OutOrStdout()); err != nil {
+				return err
+			}
+			return st.Snapshot(cmd.Context(), g.servePath()) // so the web app sees the new vectors
 		},
 	}
 	addEmbedFlags(cmd, &opts)
