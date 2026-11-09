@@ -158,3 +158,43 @@ func TestRunScript(t *testing.T) {
 		t.Errorf("script should set variables and run every statement; rows = %d", got)
 	}
 }
+
+func TestSnapshotAndOpenReadOnly(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, err := Open(ctx, filepath.Join(dir, "live.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.DB().Exec(`CREATE TABLE note AS SELECT 'published' AS text`); err != nil {
+		t.Fatal(err)
+	}
+	copyPath := filepath.Join(dir, "serve.duckdb")
+	if err := s.Snapshot(ctx, copyPath); err != nil {
+		t.Fatal(err)
+	}
+
+	// The live database stays writable while the copy is open elsewhere.
+	if _, err := s.DB().Exec(`INSERT INTO note VALUES ('live only')`); err != nil {
+		t.Fatal(err)
+	}
+
+	ro, err := OpenReadOnly(ctx, copyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	if got := count(t, ro, `SELECT count(*) FROM note`); got != 1 {
+		t.Errorf("the copy should hold what was there when it was taken; rows = %d", got)
+	}
+	if _, err := ro.DB().Exec(`CREATE TABLE x (a INT)`); err == nil {
+		t.Error("the served copy must be read-only")
+	}
+	if _, err := ro.DB().Exec(`SELECT * FROM read_csv('/etc/hostname')`); err == nil {
+		t.Error("queries on the served copy must not read local files")
+	}
+	if _, err := ro.DB().Exec(`SET enable_external_access = true`); err == nil {
+		t.Error("the lockdown must not be reversible")
+	}
+}

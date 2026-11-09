@@ -26,7 +26,8 @@ import (
 
 // Store is an open recbook database.
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string // "" for an in-memory database
 }
 
 // Open opens the database at path, creating it if needed, and applies any
@@ -46,7 +47,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrating %s: %w", path, err)
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, path: path}, nil
 }
 
 // DB returns the underlying connection pool, for queries.
