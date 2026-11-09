@@ -9,9 +9,13 @@ WITH edition AS (
         list_filter(ct.creators, lambda c: c.role = 'narrator')[1].name AS narrator,
         coalesce(a.available, false) AS available,
         a.wait_days, a.holds,
-        -- not the whole book as written: "Abridged", "Dramatized", "Adapted"
-        coalesce(ct.edition ILIKE '%abridged%' AND ct.edition NOT ILIKE '%unabridged%'
-                 OR ct.edition ILIKE '%dramatiz%' OR ct.edition ILIKE '%adapted%', false) AS abridged
+        -- Not the whole book as written. Labels seen in a real catalog:
+        -- "Abridged", "Dramatized"/"Dramatised", "Adapted", "Audio Theater",
+        -- "Unabridged Selections", "Unabridged, Young Readers".
+        coalesce(
+            (ct.edition ILIKE '%abridged%' AND ct.edition NOT ILIKE '%unabridged%')
+            OR regexp_matches(ct.edition, '(?i)dramati|adapt|audio theat|selections|young readers'),
+            false) AS abridged
     FROM work_signal s
     JOIN work w USING (work_id)
     JOIN work_record wr USING (work_id)

@@ -20,6 +20,7 @@ func Catalog() ([]contract.CatalogTitle, []contract.Availability) {
 		// ... or by title and author (the rest).
 		{"9010", "The Brothers Karamazov", "", "Fyodor Dostoevsky", "Constantine Gregory", true, 0, ""},
 		{"9014", "The Brothers Karamazov", "", "Fyodor Dostoevsky", "Simon Vance", false, 7, ""}, // a second recording
+		{"9022", "The Brothers Karamazov", "", "Fyodor Dostoevsky", "A Full Cast", true, 0, "Dramatised"},
 		{"9011", "A Gentleman in Moscow", "", "Amor Towles", "Nicholas Guy Smith", false, 30, ""},
 		{"9021", "A Gentleman in Moscow", "", "Amor Towles", "A Full Cast", true, 0, "Abridged, Dramatized Performance"},
 		{"9012", "Ethics", "Demonstrated in Geometrical Order", "Benedict de Spinoza", "Kevin Theis", true, 0, ""},

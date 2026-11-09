@@ -76,7 +76,7 @@ func TestRunMatchesTheDemo(t *testing.T) {
 		t.Error("two le Carré novels must stay apart")
 	}
 
-	if rep.ShelfRecords != 21 || rep.CatalogRecords != 16 {
+	if rep.ShelfRecords != 21 || rep.CatalogRecords != 17 {
 		t.Errorf("records: %d shelf, %d catalog", rep.ShelfRecords, rep.CatalogRecords)
 	}
 	if rep.EdgesByMethod["isbn"] != 1 || rep.EdgesByMethod["ref:overdrive"] != 5 || rep.EdgesByMethod["main_title"] < 2 {

@@ -58,7 +58,8 @@ func TestList(t *testing.T) {
 	// the two Karamazov recordings collapse into the available one.
 
 	// A Gentleman in Moscow has a dramatized version available now, but the
-	// full recording wins despite its wait.
+	// full recording wins despite its wait. Karamazov's "Dramatised" one
+	// loses to the available full recording.
 	entries, err := List(ctx, st, Options{MaxWaitDays: -1})
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +67,9 @@ func TestList(t *testing.T) {
 	for _, e := range entries {
 		if e.Title == "A Gentleman in Moscow" && (e.Abridged || !strings.HasSuffix(e.URL, "/9011")) {
 			t.Errorf("want the full recording 9011, got %s (abridged=%v)", e.URL, e.Abridged)
+		}
+		if e.Title == "The Brothers Karamazov" && !strings.HasSuffix(e.URL, "/9010") {
+			t.Errorf(`"Dramatised" (British spelling) is not the full text: got %s`, e.URL)
 		}
 	}
 
