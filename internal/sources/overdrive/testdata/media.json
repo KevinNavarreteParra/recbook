@@ -1,0 +1,38 @@
+{
+  "id": "424242",
+  "reserveId": "00000000-0000-0000-0000-000000424242",
+  "title": "The Lighthouse Keeper's Ledger",
+  "subtitle": "A Novel of the Northern Coast",
+  "sortTitle": "Lighthouse Keepers Ledger",
+  "type": {"id": "audiobook", "name": "Audiobook"},
+  "edition": "Unabridged",
+  "publishDate": "2021-03-09T00:00:00Z",
+  "publisher": {"id": "1", "name": "Invented Audio"},
+  "description": "<p>A synthetic record shaped like a Thunder <b>media</b> item, for tests.</p>",
+  "creators": [
+    {"id": 1, "name": "Ada Fenwick", "role": "Author", "sortName": "Fenwick, Ada"},
+    {"id": 2, "name": "Tomas Reyes", "role": "Translator", "sortName": "Reyes, Tomas"},
+    {"id": 3, "name": "June Okafor", "role": "Narrator", "sortName": "Okafor, June"}
+  ],
+  "formats": [
+    {"id": "audiobook-overdrive", "isbn": "9798999900029", "duration": "09:41:45",
+     "identifiers": [{"type": "ISBN", "value": "9798999900029"}]},
+    {"id": "audiobook-mp3", "isbn": "97989999000", "duration": "09:41:45"}
+  ],
+  "languages": [{"id": "en", "name": "English"}],
+  "subjects": [{"id": "26", "name": "Fiction"}, {"id": "49", "name": "Literature"}],
+  "bisac": [
+    {"code": "FIC019000", "description": "Fiction / Literary "},
+    {"code": "FIC045000", "description": "Fiction / Family Life / General "}
+  ],
+  "bisacCodes": ["FIC019000", "FIC045000"],
+  "series": "Northern Coast",
+  "detailedSeries": {"seriesId": 7, "seriesName": "Northern Coast", "readingOrder": "2", "rank": 2},
+  "covers": {"cover300Wide": {"href": "https://example.invalid/cover300.jpg", "width": 300}},
+  "isAvailable": false,
+  "ownedCopies": 2,
+  "availableCopies": 0,
+  "holdsCount": 7,
+  "estimatedWaitDays": 42,
+  "isOwned": true
+}
