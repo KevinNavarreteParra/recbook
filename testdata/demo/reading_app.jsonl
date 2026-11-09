@@ -1,0 +1,13 @@
+{"item": {"id": "ra-1", "title": "Tinker, Tailor, Soldier, Spy", "authors": ["John le Carré"], "isbns": ["9798999900012"], "format": "print"}}
+{"item": {"id": "ra-2", "title": "Dune", "authors": ["Frank Herbert"], "format": "print"}}
+{"item": {"id": "ra-3", "title": "The Hunt for Red October", "authors": ["Tom Clancy"], "format": "print"}}
+{"item": {"id": "ra-4", "title": "A Gentleman in Moscow", "authors": ["Amor Towles"], "format": "print"}}
+{"item": {"id": "ra-5", "title": "The Spy Who Came in from the Cold", "authors": ["John le Carré"], "format": "print"}}
+{"item": {"id": "ra-6", "title": "Crime and Punishment", "authors": ["Fyodor Dostoevsky"], "format": "print"}}
+{"event": {"item_id": "ra-1", "kind": "finished", "on": "2022-03-10", "date_quality": "user"}}
+{"event": {"item_id": "ra-2", "kind": "finished", "on": "2021-05-03", "date_quality": "user"}}
+{"event": {"item_id": "ra-3", "kind": "wanted", "on": "2020-06-01", "date_quality": "user"}}
+{"event": {"item_id": "ra-3", "kind": "finished", "on": "2020-08-15", "date_quality": "user"}}
+{"event": {"item_id": "ra-4", "kind": "wanted", "on": "2024-02-01", "date_quality": "user"}}
+{"event": {"item_id": "ra-5", "kind": "wanted", "on": "2024-05-01", "date_quality": "user"}}
+{"event": {"item_id": "ra-6", "kind": "finished", "on": "2019-11-01", "date_quality": "user"}}

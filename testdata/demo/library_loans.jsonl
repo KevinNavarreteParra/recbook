@@ -1,0 +1,15 @@
+{"item": {"id": "9001", "title": "The Hunt for Red October", "authors": ["Tom Clancy"], "format": "audiobook", "refs": {"overdrive": "9001"}}}
+{"item": {"id": "9002", "title": "The Da Vinci Code", "authors": ["Dan Brown"], "format": "audiobook", "refs": {"overdrive": "9002"}}}
+{"item": {"id": "9003", "title": "The Spy Who Came in from the Cold", "authors": ["John le Carré"], "format": "audiobook", "refs": {"overdrive": "9003"}}}
+{"item": {"id": "9004", "title": "Gone Girl", "authors": ["Gillian Flynn"], "format": "audiobook", "refs": {"overdrive": "9004"}}}
+{"item": {"id": "9005", "title": "Project Hail Mary", "authors": ["Andy Weir"], "format": "audiobook", "refs": {"overdrive": "9005"}}}
+{"event": {"item_id": "9001", "kind": "borrowed", "on": "2020-07-20", "date_quality": "system"}}
+{"event": {"item_id": "9001", "kind": "returned", "on": "2020-08-10", "date_quality": "system"}}
+{"event": {"item_id": "9002", "kind": "borrowed", "on": "2023-01-01", "date_quality": "system"}}
+{"event": {"item_id": "9002", "kind": "returned", "on": "2023-01-05", "date_quality": "system", "detail": "early"}}
+{"event": {"item_id": "9003", "kind": "borrowed", "on": "2024-07-01", "date_quality": "system"}}
+{"event": {"item_id": "9003", "kind": "returned", "on": "2024-07-22", "date_quality": "system", "detail": "expired"}}
+{"event": {"item_id": "9004", "kind": "borrowed", "on": "2023-06-01", "date_quality": "system"}}
+{"event": {"item_id": "9004", "kind": "renewed", "on": "2023-06-21", "date_quality": "system"}}
+{"event": {"item_id": "9004", "kind": "returned", "on": "2023-07-12", "date_quality": "system", "detail": "expired"}}
+{"event": {"item_id": "9005", "kind": "hold_placed", "on": "2024-09-01", "date_quality": "system"}}

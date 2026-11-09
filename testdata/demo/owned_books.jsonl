@@ -1,0 +1,16 @@
+{"item": {"id": "ob-1", "title": "Tinker Tailor Soldier Spy", "authors": ["le Carré, John"], "isbns": ["979-8-9999-0001-2"], "format": "print"}}
+{"item": {"id": "ob-2", "title": "Dune", "authors": ["Herbert, Frank"], "format": "print"}}
+{"item": {"id": "ob-3", "title": "The Brothers Karamazov", "authors": ["Dostoevsky, Fyodor"], "format": "print"}}
+{"item": {"id": "ob-4", "title": "Ethics", "authors": ["Spinoza, Benedictus de"], "format": "print"}}
+{"item": {"id": "ob-5", "title": "Meditations", "authors": ["Marcus Aurelius"], "format": "print"}}
+{"item": {"id": "ob-6", "title": "The Republic", "authors": ["Plato"], "format": "print"}}
+{"item": {"id": "ob-7", "title": "Notes from Underground", "authors": ["Dostoevsky, Fyodor"], "format": "print"}}
+{"item": {"id": "ob-8", "title": "Crime and Punishment", "authors": ["Dostoevsky, Fyodor"], "format": "print"}}
+{"event": {"item_id": "ob-1", "kind": "acquired", "on": "2022-06-01", "date_quality": "user"}}
+{"event": {"item_id": "ob-2", "kind": "acquired"}}
+{"event": {"item_id": "ob-3", "kind": "acquired", "on": "2019-12-25", "date_quality": "user"}}
+{"event": {"item_id": "ob-4", "kind": "acquired", "on": "2019-12-25", "date_quality": "user"}}
+{"event": {"item_id": "ob-5", "kind": "acquired", "on": "2019-12-25", "date_quality": "user"}}
+{"event": {"item_id": "ob-6", "kind": "acquired", "on": "2019-12-25", "date_quality": "user"}}
+{"event": {"item_id": "ob-7", "kind": "acquired", "on": "2019-12-25", "date_quality": "user"}}
+{"event": {"item_id": "ob-8", "kind": "acquired", "on": "2019-12-25", "date_quality": "user"}}

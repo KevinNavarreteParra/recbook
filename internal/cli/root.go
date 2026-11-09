@@ -4,9 +4,12 @@
 package cli
 
 import (
+	"context"
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
 // Execute runs the command named on the command line.
@@ -30,7 +33,15 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&g.dbPath, "db", envOr("RECBOOK_DB", "data/recbook.duckdb"),
 		"DuckDB database file (env RECBOOK_DB)")
 
+	root.AddCommand(
+		newIngestCmd(g),
+	)
 	return root
+}
+
+// openStore opens the database named by --db.
+func (g *globals) openStore(ctx context.Context) (*store.Store, error) {
+	return store.Open(ctx, g.dbPath)
 }
 
 // envOr returns the environment variable key, or fallback when it is unset.
