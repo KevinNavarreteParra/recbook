@@ -1,0 +1,12 @@
+# Starts the nightly job at 02:00. A run missed while the machine was off
+# is skipped rather than made up in the daytime, and the job itself also
+# does nothing outside its window.
+[Unit]
+Description=Start recbook's nightly upkeep at 02:00
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

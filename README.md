@@ -47,6 +47,16 @@ in `data/match_overrides.csv`, and `build` lists matches worth checking in
 `data/review/matches.csv`. There is no CI workflow: run `make check` before
 pushing.
 
+## Nightly job
+
+`recbook nightly` re-crawls the catalog once a week, rebuilds, and embeds
+any new descriptions on the GPU. A systemd user timer starts it at 02:00
+(`make nightly-install`; units in `deploy/systemd`). It does nothing outside
+02:00-06:00 and stops when the window closes. It won't start while the GPU
+is busy and backs off if a game starts. Ollama runs only for the length of
+the job, and whatever a night doesn't finish, the next night continues.
+Logs: `journalctl --user -u recbook-nightly`.
+
 ## Adding a source
 
 Add a package under `internal/sources/` whose reader turns the export into
@@ -67,5 +77,7 @@ and lists every problem.
 | `resolve` | matches records into works |
 | `signals` | trusted dates, labels, provenance, signal tiers |
 | `backlog` | owned or wanted books the library can lend |
+| `blurb`, `embed`, `ollama` | clean descriptions, embed them, run the local model |
+| `nightly` | the night window and GPU guard |
 | `demo` | synthetic data for tests and `recbook demo` |
 | `cli` | one file per command |

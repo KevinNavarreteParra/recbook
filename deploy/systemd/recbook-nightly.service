@@ -1,0 +1,18 @@
+# The nightly upkeep job. Installed by `make nightly-install`; see the
+# timer for when it runs. To change the hours, change both the timer's
+# OnCalendar and --window below.
+[Unit]
+Description=recbook nightly upkeep: catalog, rebuild, embeddings (02:00-06:00 only)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/utilities/recbook
+# The job refuses to run outside --window and stops itself when it closes.
+# It starts its own Ollama server and stops it at the end.
+ExecStart=%h/utilities/recbook/bin/recbook nightly --window 02:00-06:00 --library lasvegas --ollama %h/.local/bin/ollama
+# Backstop, in case the job overran its own deadline: stop it 15 minutes
+# after the window. Stopping sends SIGTERM to the job and the Ollama server
+# it started; the job saves its current batch and exits.
+TimeoutStartSec=4h15min
+KillMode=control-group
+Nice=10
