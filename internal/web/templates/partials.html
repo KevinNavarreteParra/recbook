@@ -1,0 +1,103 @@
+{{/* Pieces shared by the pages, and the fragments htmx swaps in. */}}
+
+{{define "wait-select"}}
+<label>wait
+  <select name="wait">
+    <option value=""{{if eq . ""}} selected{{end}}>any</option>
+    <option value="7"{{if eq . "7"}} selected{{end}}>up to a week</option>
+    <option value="14"{{if eq . "14"}} selected{{end}}>up to 2 weeks</option>
+    <option value="30"{{if eq . "30"}} selected{{end}}>up to a month</option>
+  </select>
+</label>
+{{end}}
+
+{{define "filters"}}
+<div class="filters">
+  <label><input type="checkbox" name="now" value="1"{{if .AvailableNow}} checked{{end}}> available now</label>
+  {{template "wait-select" .MaxWait}}
+  <label>length
+    <select name="len">
+      <option value=""{{if eq .Length ""}} selected{{end}}>any</option>
+      <option value="short"{{if eq .Length "short"}} selected{{end}}>under 6h</option>
+      <option value="medium"{{if eq .Length "medium"}} selected{{end}}>6–12h</option>
+      <option value="long"{{if eq .Length "long"}} selected{{end}}>over 12h</option>
+    </select>
+  </label>
+  <label><input type="checkbox" name="read" value="1"{{if .IncludeRead}} checked{{end}}> include books I've read</label>
+</div>
+{{end}}
+
+{{define "results"}}
+{{if .}}
+{{with .Caption}}<p class="caption">{{.}}</p>{{end}}
+{{if .Rows}}
+<table class="results">
+  <thead><tr><th>Title</th><th>Author</th><th class="narrator">Narrator</th><th>Length</th><th>Available</th><th>Mine</th><th></th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+  <tr>
+    <td class="title">
+      <a href="{{.URL}}" target="_blank" rel="noopener">{{.Title}}</a>
+      {{with .Subtitle}}<div class="sub">{{.}}</div>{{end}}
+      {{with .Why}}<div class="why">{{.}}</div>{{end}}
+    </td>
+    <td>{{.Author}}</td>
+    <td class="narrator">{{.Narrator}}</td>
+    <td class="nowrap">{{.Length}}</td>
+    <td class="nowrap{{if .Available}} now{{end}}">{{.Availability}}</td>
+    <td class="mine">{{.Mine}}</td>
+    <td class="do">
+      <a class="more" href="/similar?seed={{.WorkID}}">More like this</a>
+      {{template "actions" .}}
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="empty">{{.Empty}}</p>
+{{end}}
+{{end}}
+{{end}}
+
+{{/* A row's tracker buttons, or its latest mark with an undo. */}}
+{{define "actions"}}
+<div class="actions">
+{{if .Mark}}
+  <span class="mark">{{markLabel .Mark.Kind}} {{.Mark.On}}</span>
+  <form hx-post="/undo" hx-target="closest .actions" hx-swap="outerHTML">
+    <input type="hidden" name="title_id" value="{{.TitleID}}">
+    <button class="link">undo</button>
+  </form>
+{{else}}
+  <form hx-post="/mark" hx-target="closest .actions" hx-swap="outerHTML">
+    <input type="hidden" name="title_id" value="{{.TitleID}}">
+    {{range marks}}<button name="kind" value="{{.Kind}}">{{.Label}}</button>{{end}}
+  </form>
+{{end}}
+</div>
+{{end}}
+
+{{define "seed-input"}}
+<input id="seed-q" type="search" name="q" placeholder="Add a book you liked…" autocomplete="off"
+       hx-get="/seeds" hx-trigger="input changed delay:250ms" hx-target="#seed-options"{{if .}} hx-swap-oob="true"{{end}}>
+{{end}}
+
+{{define "seed-options"}}
+{{range .}}
+<button type="button" class="option" hx-get="/seed-chip?id={{.ID}}" hx-target="#seeds" hx-swap="beforeend">
+  {{.Title}} <span class="sub">{{.Author}}{{if .OnShelf}} · on my shelf{{end}}</span>
+</button>
+{{end}}
+{{end}}
+
+{{define "chip"}}
+<span class="chip"><input type="hidden" name="seed" value="{{.ID}}">{{.Title}}<button type="button" class="x" aria-label="remove" onclick="this.parentElement.remove()">×</button></span>
+{{end}}
+
+{{/* A newly picked seed, plus out-of-band swaps that clear the picker. */}}
+{{define "seed-chip"}}
+{{template "chip" .}}
+<div id="seed-options" class="options" hx-swap-oob="true"></div>
+{{template "seed-input" true}}
+{{end}}

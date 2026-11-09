@@ -1,0 +1,8 @@
+{{define "content"}}
+<form class="search" action="/search" method="get"
+      hx-get="/search" hx-target="#results" hx-push-url="true" hx-trigger="input delay:300ms, change, submit">
+  <input class="q" type="search" name="q" value="{{.Query}}" placeholder="Title, author, narrator, subject…" autofocus autocomplete="off">
+  {{template "filters" .Filters}}
+</form>
+<div id="results">{{template "results" .Results}}</div>
+{{end}}

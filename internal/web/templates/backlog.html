@@ -1,0 +1,10 @@
+{{define "content"}}
+<form class="search" action="/backlog" method="get" hx-get="/backlog" hx-target="#results" hx-push-url="true" hx-trigger="change">
+  <p class="caption">Books I own or want and haven't finished, that the library has.</p>
+  <div class="filters">
+    <label><input type="checkbox" name="now" value="1"{{if .Filters.AvailableNow}} checked{{end}}> available now</label>
+    {{template "wait-select" .Filters.MaxWait}}
+  </div>
+</form>
+<div id="results">{{template "results" .Results}}</div>
+{{end}}

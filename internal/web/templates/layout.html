@@ -1,0 +1,25 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true}'>
+<title>recbook</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js"></script>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">recbook</a>
+  <nav>
+    <a href="/"{{if eq .Nav "search"}} aria-current="page"{{end}}>Search</a>
+    <a href="/recommend"{{if eq .Nav "recommend"}} aria-current="page"{{end}}>Recommend</a>
+    <a href="/backlog"{{if eq .Nav "backlog"}} aria-current="page"{{end}}>Backlog</a>
+    <a href="/listened"{{if eq .Nav "listened"}} aria-current="page"{{end}}>Listened</a>
+  </nav>
+</header>
+<main>
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}

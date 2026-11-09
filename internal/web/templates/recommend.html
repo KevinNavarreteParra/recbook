@@ -1,0 +1,11 @@
+{{define "content"}}
+<form class="search" action="/similar" method="get">
+  <p class="caption">Pick books you liked; recommendations read like them. Books you own and finished count most.</p>
+  <div id="seeds">{{range .Seeds}}{{template "chip" .}}{{end}}</div>
+  {{template "seed-input" false}}
+  <div id="seed-options" class="options"></div>
+  {{template "filters" .Filters}}
+  <button type="submit">Recommend</button>
+</form>
+<div id="results">{{template "results" .Results}}</div>
+{{end}}
