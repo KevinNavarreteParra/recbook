@@ -34,8 +34,10 @@ Needs Go 1.27+ and a C compiler (the DuckDB driver uses cgo).
 go run ./cmd/recbook demo                            # made-up data in data/demo.duckdb
 go run ./cmd/recbook --db data/demo.duckdb backlog
 
-go run ./cmd/recbook ingest jsonl --as goodreads my-export.jsonl
-go run ./cmd/recbook crawl --library <key>           # <key> from libbyapp.com/library/<key>
+go run ./cmd/recbook ingest readinglist  data/exports/readinglist.csv
+go run ./cmd/recbook ingest libby        data/exports/libby-timeline.json
+go run ./cmd/recbook ingest librarything data/exports/librarything.json
+go run ./cmd/recbook crawl --library lasvegas        # the key in libbyapp.com/library/<key>
 go run ./cmd/recbook build
 go run ./cmd/recbook backlog --available-now
 ```
@@ -50,16 +52,16 @@ pushing.
 Add a package under `internal/sources/` whose reader turns the export into
 a `contract.Shelf`, and list it in `internal/sources/sources.go`. To skip
 writing Go, have any script emit the JSONL form of the contract
-(`internal/sources/jsonl`) and run `recbook ingest jsonl --as <name>`. Either
-way, the store rejects a shelf that breaks the contract and lists every
-problem.
+(`internal/sources/jsonl`) and run `recbook ingest jsonl --as goodreads
+file.jsonl`. Either way, the store rejects a shelf that breaks the contract
+and lists every problem.
 
 ## Layout
 
 | Package | Does |
 |---|---|
 | `contract` | canonical records and their validation |
-| `sources/jsonl`, `sources/overdrive` | adapters |
+| `sources/*` | adapters: `readinglist`, `libby`, `librarything`, `overdrive`, and `jsonl` |
 | `store` | DuckDB schema, migrations, writes |
 | `textkey` | title and author matching keys |
 | `resolve` | matches records into works |
