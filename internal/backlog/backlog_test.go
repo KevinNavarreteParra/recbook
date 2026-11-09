@@ -3,6 +3,7 @@ package backlog
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
@@ -55,6 +56,18 @@ func TestList(t *testing.T) {
 	}
 	// Notes from Underground is owned and unread, but the library lacks it;
 	// the two Karamazov recordings collapse into the available one.
+
+	// A Gentleman in Moscow has a dramatized version available now, but the
+	// full recording wins despite its wait.
+	entries, err := List(ctx, st, Options{MaxWaitDays: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Title == "A Gentleman in Moscow" && (e.Abridged || !strings.HasSuffix(e.URL, "/9011")) {
+			t.Errorf("want the full recording 9011, got %s (abridged=%v)", e.URL, e.Abridged)
+		}
+	}
 
 	if got := titles(Options{AvailableNow: true, MaxWaitDays: -1}); len(got) != 3 {
 		t.Errorf("--available-now = %q", got)

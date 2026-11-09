@@ -53,7 +53,11 @@ func length(e backlog.Entry) string {
 	if !e.DurationMin.Valid {
 		return ""
 	}
-	return fmt.Sprintf("%dh%02d", e.DurationMin.Int64/60, e.DurationMin.Int64%60)
+	s := fmt.Sprintf("%dh%02d", e.DurationMin.Int64/60, e.DurationMin.Int64%60)
+	if e.Abridged {
+		s += " (abridged)"
+	}
+	return s
 }
 
 func availability(e backlog.Entry) string {

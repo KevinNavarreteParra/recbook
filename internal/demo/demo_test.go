@@ -20,7 +20,7 @@ func TestLoad(t *testing.T) {
 	var sources, titles int
 	st.DB().QueryRow(`SELECT count(DISTINCT source) FROM shelf_item`).Scan(&sources)
 	st.DB().QueryRow(`SELECT count(*) FROM catalog_title`).Scan(&titles)
-	if sources != len(Shelves) || titles != 15 {
+	if sources != len(Shelves) || titles != 16 {
 		t.Errorf("loaded %d shelf sources and %d titles", sources, titles)
 	}
 }

@@ -31,6 +31,7 @@ type Entry struct {
 	WaitDays    sql.NullInt64 // the library's estimate, when not available now
 	Holds       sql.NullInt64
 	DurationMin sql.NullInt64
+	Abridged    bool // abridged, dramatized or adapted; shown only when no full recording exists
 	URL         string
 }
 
@@ -54,7 +55,7 @@ func List(ctx context.Context, st *store.Store, opts Options) ([]Entry, error) {
 		var e Entry
 		var author, narrator, url sql.NullString
 		err := rows.Scan(&e.Tier, &e.Title, &author, &narrator, &e.Available,
-			&e.WaitDays, &e.Holds, &e.DurationMin, &url)
+			&e.WaitDays, &e.Holds, &e.DurationMin, &e.Abridged, &url)
 		if err != nil {
 			return nil, err
 		}
