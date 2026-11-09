@@ -1,0 +1,8 @@
+# Personal data never leaves this machine: the database, exports, overrides, review files.
+/data/
+
+# Build output
+/bin/
+
+# Local environment (secrets are pass:// references, but keep it out anyway)
+.env
