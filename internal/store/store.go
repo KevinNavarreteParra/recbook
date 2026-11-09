@@ -1,10 +1,12 @@
 // Package store owns the DuckDB database: opening it, keeping its schema up
 // to date, and writing contract records into it.
 //
-// The database has two layers. Contract tables (migrations/001_contract.sql)
+// The database has three layers. Contract tables (migrations/001_contract.sql)
 // hold what sources reported, and only this package writes them. Derived
 // tables are rebuilt from scratch by packages like resolve and signals, each
-// from SQL that lives next to the Go that runs it, via RunScript.
+// from SQL that lives next to the Go that runs it, via RunScript. Caches of
+// slow work, such as embeddings (migrations/002_embedding.sql), are kept
+// across rebuilds and only ever added to.
 package store
 
 import (
