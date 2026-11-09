@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/KevinNavarreteParra/recbook/internal/library"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
@@ -50,6 +51,9 @@ func build(ctx context.Context, st *store.Store, dataDir string, out io.Writer) 
 		return err
 	}
 	if err := signals.Run(ctx, st, signals.Options{}); err != nil {
+		return err
+	}
+	if err := library.Build(ctx, st); err != nil {
 		return err
 	}
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
+	"github.com/KevinNavarreteParra/recbook/internal/library"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
@@ -28,6 +29,9 @@ func TestList(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := signals.Run(ctx, st, signals.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := library.Build(ctx, st); err != nil {
 		t.Fatal(err)
 	}
 

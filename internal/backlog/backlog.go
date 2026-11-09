@@ -36,7 +36,7 @@ type Entry struct {
 }
 
 // List returns the backlog, most borrowable first. It needs `recbook build`
-// to have run.
+// to have run (signals and library).
 func List(ctx context.Context, st *store.Store, opts Options) ([]Entry, error) {
 	if opts.Limit == 0 {
 		opts.Limit = 50
