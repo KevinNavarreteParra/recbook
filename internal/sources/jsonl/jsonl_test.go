@@ -48,7 +48,7 @@ func TestReadRejects(t *testing.T) {
 
 // The demo files must always satisfy the contract.
 func TestDemoFilesAreValid(t *testing.T) {
-	paths, _ := filepath.Glob("../../../testdata/demo/*.jsonl")
+	paths, _ := filepath.Glob("../../demo/*.jsonl")
 	if len(paths) == 0 {
 		t.Fatal("no demo files found")
 	}

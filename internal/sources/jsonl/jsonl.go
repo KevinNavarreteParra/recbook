@@ -7,7 +7,7 @@
 // Field names are the JSON tags on contract.ShelfItem and contract.ShelfEvent.
 // This is the zero-code way to add a source: any script that writes this
 // format can be ingested with `recbook ingest jsonl --as <name> file`. The
-// demo data in testdata/ uses it too.
+// demo shelves in internal/demo use it too.
 package jsonl
 
 import (
