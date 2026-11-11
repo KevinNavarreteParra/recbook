@@ -98,15 +98,34 @@ func ValidateCatalog(titles []CatalogTitle, avail []Availability) error {
 		if !ids[a.TitleID] {
 			p.add(at, "title_id matches no title in the batch")
 		}
-		if a.CopiesOwned < 0 || a.CopiesAvailable < 0 || a.Holds < 0 {
-			p.add(at, "counts can't be negative")
-		}
-		if a.WaitDays != nil && *a.WaitDays < 0 {
-			p.add(at, "wait estimate can't be negative")
-		}
+		checkAvailability(&p, at, a)
 	}
 
 	return p.err("catalog batch")
+}
+
+// ValidateAvailability reports every way a batch of availability snapshots
+// for titles already in the catalog breaks the contract. It returns nil
+// when the batch is valid.
+func ValidateAvailability(avail []Availability) error {
+	var p problems
+	for i, a := range avail {
+		at := fmt.Sprintf("availability %d (title %q)", i, a.TitleID)
+		if a.TitleID == "" {
+			p.add(at, "title_id is empty")
+		}
+		checkAvailability(&p, at, a)
+	}
+	return p.err("availability batch")
+}
+
+func checkAvailability(p *problems, at string, a Availability) {
+	if a.CopiesOwned < 0 || a.CopiesAvailable < 0 || a.Holds < 0 {
+		p.add(at, "counts can't be negative")
+	}
+	if a.WaitDays != nil && *a.WaitDays < 0 {
+		p.add(at, "wait estimate can't be negative")
+	}
 }
 
 func checkFormat(p *problems, at string, f Format) {

@@ -63,6 +63,12 @@ func (c *Client) toContract(m media) (contract.CatalogTitle, contract.Availabili
 		t.CoverURL = cover.Href
 	}
 
+	return t, availabilityOf(m)
+}
+
+// availabilityOf reads a record's availability, which list results and
+// bulk results both carry in full.
+func availabilityOf(m media) contract.Availability {
 	a := contract.Availability{
 		TitleID:         m.ID,
 		Available:       m.IsAvailable,
@@ -73,7 +79,7 @@ func (c *Client) toContract(m media) (contract.CatalogTitle, contract.Availabili
 	if w := m.EstimatedWaitDays; w != nil && *w >= 0 {
 		a.WaitDays = w
 	}
-	return t, a
+	return a
 }
 
 func formatOf(typeID string) contract.Format {

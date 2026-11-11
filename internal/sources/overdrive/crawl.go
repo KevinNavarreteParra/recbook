@@ -9,10 +9,13 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/contract"
 )
 
-// Batch is one page of crawled titles, ready for store.SaveCatalog.
+// Batch is one page of crawled titles. Titles new to the crawl's caller
+// come in full, ready for store.SaveCatalog; titles it already has come as
+// availability alone, read from the listing, ready for store.SaveSeen.
 type Batch struct {
 	Titles       []contract.CatalogTitle
-	Availability []contract.Availability
+	Availability []contract.Availability // for Titles
+	Seen         []contract.Availability // for titles already known
 }
 
 // Progress reports how far a crawl has got, for printing.
@@ -33,10 +36,16 @@ type Result struct {
 // it goes, so an interrupted crawl keeps what it fetched. progress, if not
 // nil, is called after every page.
 //
+// Listings cut descriptions short, so new titles cost a second request,
+// for their full records. Titles in known are already stored, and their
+// listing says all a re-crawl needs (that they're still there, and their
+// availability), so they cost nothing more. That halves a re-crawl. A nil
+// known fetches every full record again.
+//
 // Thunder serves only the first MaxPages pages of a query, so a collection
 // bigger than PageSize × MaxPages titles is first split into partitions
 // small enough to page through (see plan).
-func (c *Client) Crawl(ctx context.Context, save func(Batch) error, progress func(Progress)) (Result, error) {
+func (c *Client) Crawl(ctx context.Context, known map[string]bool, save func(Batch) error, progress func(Progress)) (Result, error) {
 	var res Result
 
 	top, err := c.search(ctx, url.Values{}, 1, 1, false)
@@ -65,9 +74,15 @@ func (c *Client) Crawl(ctx context.Context, save func(Batch) error, progress fun
 				break // the partition shrank since it was planned
 			}
 
-			var ids []string
+			var b Batch
+			var ids []string // new titles, to fetch in full
 			for _, m := range listing.Items {
-				if !saved[m.ID] {
+				switch {
+				case saved[m.ID]:
+				case known[m.ID]:
+					b.Seen = append(b.Seen, availabilityOf(m))
+					saved[m.ID] = true
+				default:
 					ids = append(ids, m.ID)
 				}
 			}
@@ -77,7 +92,6 @@ func (c *Client) Crawl(ctx context.Context, save func(Batch) error, progress fun
 				if err != nil {
 					return res, err
 				}
-				var b Batch
 				for _, m := range full {
 					if saved[m.ID] {
 						continue
@@ -85,12 +99,12 @@ func (c *Client) Crawl(ctx context.Context, save func(Batch) error, progress fun
 					t, a := c.toContract(m)
 					b.Titles = append(b.Titles, t)
 					b.Availability = append(b.Availability, a)
+					saved[m.ID] = true
 				}
+			}
+			if len(b.Titles)+len(b.Seen) > 0 {
 				if err := save(b); err != nil {
 					return res, err
-				}
-				for _, t := range b.Titles {
-					saved[t.ID] = true
 				}
 			}
 

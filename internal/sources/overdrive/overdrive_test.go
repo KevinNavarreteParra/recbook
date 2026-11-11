@@ -73,7 +73,7 @@ func TestCrawlSplitsOversizedQueries(t *testing.T) {
 	c := NewClient(Config{Library: "test", BaseURL: lib.server.URL, PageSize: 2, MaxPages: 3, RequestsPerSecond: 1000, RetryDelay: time.Millisecond})
 
 	var got []string
-	res, err := c.Crawl(context.Background(), func(b Batch) error {
+	res, err := c.Crawl(context.Background(), nil, func(b Batch) error {
 		for _, title := range b.Titles {
 			got = append(got, title.ID)
 			if !strings.HasPrefix(title.Description, "Full description") {
@@ -98,13 +98,50 @@ func TestCrawlSplitsOversizedQueries(t *testing.T) {
 	}
 }
 
+// TestCrawlFetchesOnlyNewTitlesInFull re-crawls a library whose first 15
+// titles are already saved: only the other 5 should be fetched in full,
+// and the 15 should come back seen, with their availability.
+func TestCrawlFetchesOnlyNewTitlesInFull(t *testing.T) {
+	lib := newFakeLibrary(t, 20)
+	c := NewClient(Config{Library: "test", BaseURL: lib.server.URL, PageSize: 2, MaxPages: 3, RequestsPerSecond: 1000, RetryDelay: time.Millisecond})
+	known := map[string]bool{}
+	for _, ft := range lib.titles[:15] {
+		known[ft.id] = true
+	}
+
+	var full, seen []string
+	res, err := c.Crawl(context.Background(), known, func(b Batch) error {
+		for _, title := range b.Titles {
+			full = append(full, title.ID)
+		}
+		for _, a := range b.Seen {
+			seen = append(seen, a.TitleID)
+			if !a.Available || a.CopiesOwned != 1 {
+				t.Errorf("title %s: availability %+v, want what the listing says", a.TitleID, a)
+			}
+		}
+		return contract.ValidateCatalog(b.Titles, b.Availability)
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(full) != 5 || len(seen) != 15 || res.Saved != 20 {
+		t.Errorf("fetched %d in full and saw %d (saved %d); want 5, 15 and 20", len(full), len(seen), res.Saved)
+	}
+	if got := lib.bulkIDs.Load(); got != 5 {
+		t.Errorf("bulk requests asked for %d ids, want only the 5 new titles", got)
+	}
+}
+
 // fakeLibrary imitates the parts of Thunder the crawler uses: filters,
 // facet counts, a page cap, bulk lookups, and a 429 on the first request.
 type fakeLibrary struct {
-	server    *httptest.Server
-	titles    []fakeTitle
-	requests  atomic.Int64
-	throttled atomic.Int64
+	server       *httptest.Server
+	titles       []fakeTitle
+	requests     atomic.Int64
+	throttled    atomic.Int64
+	bulkRequests atomic.Int64
+	bulkIDs      atomic.Int64 // ids asked for, over every bulk request
 }
 
 type fakeTitle struct {
@@ -145,8 +182,11 @@ func (lib *fakeLibrary) serve(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	switch r.URL.Path {
 	case "/v2/libraries/test/media/bulk":
+		ids := strings.Split(q.Get("titleIds"), ",")
+		lib.bulkRequests.Add(1)
+		lib.bulkIDs.Add(int64(len(ids)))
 		var items []map[string]any
-		for _, id := range strings.Split(q.Get("titleIds"), ",") {
+		for _, id := range ids {
 			items = append(items, record(id, "Full description of "+id))
 		}
 		json.NewEncoder(w).Encode(map[string]any{"items": items})
@@ -190,7 +230,8 @@ func (lib *fakeLibrary) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func record(id, description string) map[string]any {
-	return map[string]any{"id": id, "title": "Title " + id, "description": description, "type": map[string]any{"id": "audiobook"}}
+	return map[string]any{"id": id, "title": "Title " + id, "description": description, "type": map[string]any{"id": "audiobook"},
+		"isAvailable": true, "ownedCopies": 1, "availableCopies": 1}
 }
 
 func facetCounts(titles []fakeTitle, values func(fakeTitle) []string) map[string]any {

@@ -147,6 +147,52 @@ func TestSaveCatalogUpserts(t *testing.T) {
 	}
 }
 
+func TestSaveSeenAndSaveAvailability(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	titles := []contract.CatalogTitle{
+		{ID: "100", Title: "Dune", Format: contract.Audiobook, Description: "The full blurb."},
+		{ID: "101", Title: "Dune Messiah", Format: contract.Audiobook},
+	}
+	first := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	second := first.AddDate(0, 0, 7)
+	if err := s.SaveCatalog(ctx, "lib", titles, nil, first); err != nil {
+		t.Fatal(err)
+	}
+	known, err := s.KnownTitles(ctx, "lib")
+	if err != nil || len(known) != 2 || !known["100"] {
+		t.Fatalf("KnownTitles = %v, %v", known, err)
+	}
+
+	// A re-crawl lists Dune again: it's seen, and its blurb is kept. A
+	// title not in the catalog is ignored.
+	seen := []contract.Availability{{TitleID: "100", Available: true, CopiesOwned: 1, CopiesAvailable: 1}, {TitleID: "999"}}
+	if err := s.SaveSeen(ctx, "lib", seen, second); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(t, s, `SELECT count(*) FROM catalog_title
+		WHERE title_id = '100' AND last_seen_at = ? AND description = 'The full blurb.'`, second); got != 1 {
+		t.Error("SaveSeen should move last_seen_at and keep the rest")
+	}
+	if got := count(t, s, `SELECT count(*) FROM catalog_title WHERE title_id = '101' AND last_seen_at = ?`, first); got != 1 {
+		t.Error("a title the re-crawl didn't list keeps its last_seen_at")
+	}
+
+	// Between crawls, availability alone.
+	if err := s.SaveAvailability(ctx, "lib", []contract.Availability{{TitleID: "101", CopiesOwned: 1, Holds: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(t, s, `SELECT count(*) FROM catalog_title WHERE title_id = '101' AND last_seen_at = ?`, first); got != 1 {
+		t.Error("SaveAvailability shouldn't count as seeing the title in a crawl")
+	}
+	if got := count(t, s, `SELECT count(*) FROM availability`); got != 2 {
+		t.Errorf("availability snapshots = %d, want 2 (none for the unknown title)", got)
+	}
+	if err := s.SaveAvailability(ctx, "lib", []contract.Availability{{TitleID: "101", Holds: -1}}); err == nil {
+		t.Error("a negative hold count breaks the contract")
+	}
+}
+
 func TestRunScript(t *testing.T) {
 	s := openTest(t)
 	script := `CREATE OR REPLACE TABLE t AS SELECT getvariable('n') AS n, getvariable('label') AS label;

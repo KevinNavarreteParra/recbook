@@ -37,7 +37,7 @@ go run ./cmd/recbook --db data/demo.duckdb backlog
 go run ./cmd/recbook ingest readinglist  data/exports/readinglist.csv
 go run ./cmd/recbook ingest libby        data/exports/libby-timeline.json
 go run ./cmd/recbook ingest librarything data/exports/librarything.json
-go run ./cmd/recbook crawl --library lasvegas        # the key in libbyapp.com/library/<key>
+go run ./cmd/recbook crawl --library lasvegas        # the key in libbyapp.com/library/<key>; re-crawls fetch only new titles in full
 go run ./cmd/recbook enrich                          # describe finished books no source describes
 go run ./cmd/recbook build
 go run ./cmd/recbook embed                           # on the GPU; the nightly job keeps it current
