@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/KevinNavarreteParra/recbook/internal/authors"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/nightly"
 	"github.com/KevinNavarreteParra/recbook/internal/ollama"
@@ -116,6 +117,13 @@ func embedWorks(ctx context.Context, st *store.Store, opts embedOptions, out io.
 		rep.Works, rep.Thin, rep.Embedded, rep.Left)
 	if rep.Stopped != nil {
 		fmt.Fprintln(out, "embed: stopped early:", rep.Stopped)
+	}
+	if rep.Embedded > 0 {
+		// The nightly job builds before it embeds, so without this new
+		// books would reach their authors' vectors only a night later.
+		if err := authors.BuildVectors(ctx, st); err != nil {
+			return rep, err
+		}
 	}
 	return rep, nil
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/KevinNavarreteParra/recbook/internal/authors"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
@@ -72,6 +73,9 @@ func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) erro
 	}
 	// Works were renumbered, so the embedded texts must follow them.
 	if _, err := embed.WriteTexts(ctx, st); err != nil {
+		return err
+	}
+	if err := authors.Build(ctx, st); err != nil {
 		return err
 	}
 	if err := st.Snapshot(ctx, g.servePath()); err != nil {
