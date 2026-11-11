@@ -1,12 +1,15 @@
 // Package recommend finds borrowable audiobooks like a set of seed books
 // (spec §8, content view).
 //
-// Each seed is compared with every borrowable work on its own, and the
-// per-seed rankings are then merged by reciprocal-rank fusion, so a mixed
-// set of seeds (Clancy and Dostoevsky) yields some of each rather than the
-// muddle a single averaged query would. Seeds count in proportion to their
-// tier's weight. Works close to an "avoid" seed are pushed down, and a cap
-// per author keeps one author from taking over the list.
+// It works in two steps. Rank compares each seed with every borrowable
+// work on its own, giving one ranking per seed. Fuse then merges those
+// rankings by reciprocal-rank fusion, so a mixed set of seeds (Clancy and
+// Dostoevsky) yields some of each rather than the muddle a single averaged
+// query would. Seeds count in proportion to their tier's weight. Works
+// close to an "avoid" seed are pushed down, and a cap per author keeps one
+// author from taking over the list. Similar runs both steps; the
+// leave-one-out evaluation (internal/eval) runs them separately, so it can
+// rank each seed once and fuse many times.
 package recommend
 
 import (
@@ -17,6 +20,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
@@ -29,15 +34,21 @@ var (
 	neighboursSQL string
 )
 
+// PerSeed is how far down each seed's ranking fusion looks.
+const PerSeed = 200
+
 // Fusion settings. rrfK is the usual constant for reciprocal-rank fusion:
-// it keeps the top few ranks of any one list from dominating. perSeed is how
-// far down each seed's ranking fusion looks. avoidWeight is how hard an
-// avoid seed pushes its neighbours down, relative to a positive seed.
+// it keeps the top few ranks of any one list from dominating. avoidWeight
+// is how hard an avoid seed pushes its neighbours down, relative to a
+// positive seed.
 const (
 	rrfK        = 60
-	perSeed     = 200
 	avoidWeight = 0.5
 )
+
+// parallel is how many seeds Rank compares at once. Each comparison is one
+// DuckDB query, which uses a few cores of its own.
+const parallel = 4
 
 // Options are a recommendation request.
 type Options struct {
@@ -83,25 +94,113 @@ type Rec struct {
 	Similarity float64 // ...and how similar, as a cosine
 }
 
+// Ranking is one seed's nearest borrowable works, best first, and how
+// much the seed counts in fusion.
+type Ranking struct {
+	Seed   Seed
+	Weight float64
+	Near   []Rec
+}
+
 // Similar returns recommendations for the seeds, best first, along with
 // the seeds as they were used.
 func Similar(ctx context.Context, st *store.Store, opts Options) ([]Rec, []Seed, error) {
 	if opts.Model == "" {
 		opts.Model = embed.DefaultModel
 	}
-	if opts.Limit == 0 {
-		opts.Limit = 20
-	}
 
-	seeds, err := loadSeeds(ctx, st.DB(), opts.Model, opts.Seeds)
+	seeds, err := LoadSeeds(ctx, st, opts.Model, opts.Seeds)
 	if err != nil {
 		return nil, nil, err
 	}
-	avoid, err := loadSeeds(ctx, st.DB(), opts.Model, opts.Avoid)
+	avoid, err := LoadSeeds(ctx, st, opts.Model, opts.Avoid)
 	if err != nil {
 		return nil, nil, err
 	}
 	exclude := append(slices.Clone(opts.Seeds), opts.Avoid...)
+
+	pos, err := Rank(ctx, st, seeds, exclude, opts, PerSeed)
+	if err != nil {
+		return nil, nil, err
+	}
+	neg, err := Rank(ctx, st, avoid, exclude, opts, PerSeed)
+	if err != nil {
+		return nil, nil, err
+	}
+	return Fuse(pos, neg, opts), append(seeds, avoid...), nil
+}
+
+// LoadSeeds looks up each work as a seed: its name, its tier's weight, and
+// its vector in model, if it has one.
+func LoadSeeds(ctx context.Context, st *store.Store, model string, ids []int64) ([]Seed, error) {
+	var seeds []Seed
+	for _, id := range ids {
+		s := Seed{WorkID: id}
+		var vector any
+		err := st.DB().QueryRowContext(ctx, seedSQL, sql.Named("model", model), sql.Named("work_id", id)).
+			Scan(&s.Title, &s.Author, &s.Weight, &vector)
+		if err != nil {
+			return nil, fmt.Errorf("seed %d: %w (has `recbook build` run since the last embed?)", id, err)
+		}
+		if list, ok := vector.([]any); ok {
+			s.vector = make([]float32, len(list))
+			for i, x := range list {
+				s.vector[i] = x.(float32)
+			}
+			s.Embedded = true
+		}
+		seeds = append(seeds, s)
+	}
+	return seeds, nil
+}
+
+// Rank returns each embedded seed's nearest borrowable works, at most
+// depth of them, leaving out the works in exclude and whatever opts
+// filters out. Seeds without a vector are skipped.
+func Rank(ctx context.Context, st *store.Store, seeds []Seed, exclude []int64, opts Options, depth int) ([]Ranking, error) {
+	if opts.Model == "" {
+		opts.Model = embed.DefaultModel
+	}
+	var embedded []Seed
+	for _, s := range seeds {
+		if s.Embedded {
+			embedded = append(embedded, s)
+		}
+	}
+
+	// Each goroutine fills its own slot, so the rankings keep the seeds'
+	// order without any locking.
+	rankings := make([]Ranking, len(embedded))
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(parallel)
+	for i, s := range embedded {
+		g.Go(func() error {
+			near, err := neighbours(ctx, st.DB(), s.vector, exclude, opts, depth)
+			if err != nil {
+				return fmt.Errorf("ranking for %q: %w", s.Title, err)
+			}
+			weight := s.Weight
+			if opts.Unweighted {
+				weight = 1
+			}
+			rankings[i] = Ranking{Seed: s, Weight: weight, Near: near}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return rankings, nil
+}
+
+// Fuse merges the seeds' rankings into one list, best first: each work
+// scores the sum over the seeds' rankings of weight / (rrfK + rank), less
+// the same for the avoid seeds' rankings at avoidWeight. It then applies
+// the per-author cap and the limit.
+func Fuse(pos, avoid []Ranking, opts Options) []Rec {
+	if opts.Limit == 0 {
+		opts.Limit = 20
+	}
 
 	type candidate struct {
 		Rec
@@ -109,40 +208,22 @@ func Similar(ctx context.Context, st *store.Store, opts Options) ([]Rec, []Seed,
 	}
 	cands := map[int64]*candidate{}
 
-	for _, s := range seeds {
-		if !s.Embedded {
-			continue
-		}
-		weight := s.Weight
-		if opts.Unweighted {
-			weight = 1
-		}
-		near, err := neighbours(ctx, st.DB(), s.vector, exclude, opts)
-		if err != nil {
-			return nil, nil, err
-		}
-		for rank, n := range near {
+	for _, r := range pos {
+		for rank, n := range r.Near {
 			c, ok := cands[n.WorkID]
 			if !ok {
 				c = &candidate{Rec: n}
 				c.Similarity = -1
 				cands[n.WorkID] = c
 			}
-			c.score += weight / float64(rrfK+rank+1)
+			c.score += r.Weight / float64(rrfK+rank+1)
 			if n.Similarity > c.Similarity {
-				c.Like, c.Similarity = s.Title, n.Similarity
+				c.Like, c.Similarity = r.Seed.Title, n.Similarity
 			}
 		}
 	}
-	for _, a := range avoid {
-		if !a.Embedded {
-			continue
-		}
-		near, err := neighbours(ctx, st.DB(), a.vector, exclude, opts)
-		if err != nil {
-			return nil, nil, err
-		}
-		for rank, n := range near {
+	for _, r := range avoid {
+		for rank, n := range r.Near {
 			if c, ok := cands[n.WorkID]; ok {
 				c.score -= avoidWeight / float64(rrfK+rank+1)
 			}
@@ -174,32 +255,13 @@ func Similar(ctx context.Context, st *store.Store, opts Options) ([]Rec, []Seed,
 		c.Score = c.score
 		out = append(out, c.Rec)
 	}
-	return out, append(seeds, avoid...), nil
+	return out
 }
 
-func loadSeeds(ctx context.Context, db *sql.DB, model string, ids []int64) ([]Seed, error) {
-	var seeds []Seed
-	for _, id := range ids {
-		s := Seed{WorkID: id}
-		var vector any
-		err := db.QueryRowContext(ctx, seedSQL, sql.Named("model", model), sql.Named("work_id", id)).
-			Scan(&s.Title, &s.Author, &s.Weight, &vector)
-		if err != nil {
-			return nil, fmt.Errorf("seed %d: %w (has `recbook build` run since the last embed?)", id, err)
-		}
-		if list, ok := vector.([]any); ok {
-			s.vector = make([]float32, len(list))
-			for i, x := range list {
-				s.vector[i] = x.(float32)
-			}
-			s.Embedded = true
-		}
-		seeds = append(seeds, s)
+func neighbours(ctx context.Context, db *sql.DB, vector []float32, exclude []int64, opts Options, depth int) ([]Rec, error) {
+	if exclude == nil {
+		exclude = []int64{} // a NULL list would exclude everything
 	}
-	return seeds, nil
-}
-
-func neighbours(ctx context.Context, db *sql.DB, vector []float32, exclude []int64, opts Options) ([]Rec, error) {
 	rows, err := db.QueryContext(ctx, neighboursSQL,
 		sql.Named("seed", vector),
 		sql.Named("model", opts.Model),
@@ -207,7 +269,7 @@ func neighbours(ctx context.Context, db *sql.DB, vector []float32, exclude []int
 		sql.Named("include_read", opts.IncludeRead),
 		sql.Named("available_now", opts.AvailableNow),
 		sql.Named("max_wait", opts.MaxWaitDays),
-		sql.Named("k", perSeed))
+		sql.Named("k", depth))
 	if err != nil {
 		return nil, err
 	}

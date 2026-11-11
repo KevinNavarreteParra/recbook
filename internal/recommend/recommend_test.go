@@ -2,7 +2,6 @@ package recommend
 
 import (
 	"context"
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -16,41 +15,6 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
-// themeEmbedder makes vectors from theme words, so that "similar" is
-// predictable: one dimension per theme, plus a constant.
-type themeEmbedder struct{}
-
-var themes = [][]string{
-	{"spy", "smiley", "circus", "berlin", "agent"},
-	{"desert", "emperor", "prophec", "galaxy"},
-	{"submarine", "navy", "war"},
-	{"brothers", "faith", "russia"},
-}
-
-func (themeEmbedder) Embed(_ context.Context, _ string, inputs []string) ([][]float32, error) {
-	var out [][]float32
-	for _, in := range inputs {
-		in = strings.ToLower(in)
-		v := []float32{0.1}
-		for _, words := range themes {
-			var n float32
-			for _, w := range words {
-				n += float32(strings.Count(in, w))
-			}
-			v = append(v, n)
-		}
-		var sum float64
-		for _, x := range v {
-			sum += float64(x * x)
-		}
-		for i := range v {
-			v[i] /= float32(math.Sqrt(sum))
-		}
-		out = append(out, v)
-	}
-	return out, nil
-}
-
 func setup(t *testing.T) (*store.Store, func(name string) int64) {
 	t.Helper()
 	ctx := context.Background()
@@ -63,17 +27,8 @@ func setup(t *testing.T) (*store.Store, func(name string) int64) {
 		t.Fatal(err)
 	}
 	titles, avail := demo.Catalog()
-	blurbs := map[string]string{
-		"9013": "A mole inside the Circus. Smiley, a retired spy, hunts him through his old Berlin agents.",
-		"9016": "Smiley hunts his old adversary across Europe, calling in agents from Berlin. A spy's last case.",
-		"9003": "A burned-out spy in Berlin takes one last mission for the Circus.",
-		"9018": "The emperor of the desert finds his own prophecies closing around him across the galaxy.",
-		"9017": "A submarine war in the North Atlantic, fought by the navy.",
-		"9001": "A Soviet submarine captain defects, and the navy races to find him before war breaks out.",
-		"9010": "Three brothers in provincial Russia, a murdered father, and a long argument about faith.",
-	}
 	for i := range titles {
-		titles[i].Description = blurbs[titles[i].ID]
+		titles[i].Description = demo.Blurbs[titles[i].ID]
 	}
 	if err := st.SaveCatalog(ctx, demo.Library, titles, avail, time.Now()); err != nil {
 		t.Fatal(err)
@@ -89,7 +44,7 @@ func setup(t *testing.T) (*store.Store, func(name string) int64) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := embed.Run(ctx, st, themeEmbedder{}, embed.Options{}); err != nil {
+	if _, err := embed.Run(ctx, st, demo.ThemeEmbedder{}, embed.Options{}); err != nil {
 		t.Fatal(err)
 	}
 
