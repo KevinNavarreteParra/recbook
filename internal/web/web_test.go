@@ -17,6 +17,7 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
+	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/search"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
@@ -65,7 +66,7 @@ func app(t *testing.T) (*httptest.Server, string) {
 	}
 	for _, step := range []func(context.Context, *store.Store) error{
 		func(ctx context.Context, st *store.Store) error { return signals.Run(ctx, st, signals.Options{}) },
-		library.Build, search.Build,
+		library.Build, recommend.BuildGenre, search.Build,
 	} {
 		if err := step(ctx, st); err != nil {
 			t.Fatal(err)

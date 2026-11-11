@@ -10,6 +10,7 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
+	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
 	"github.com/KevinNavarreteParra/recbook/internal/sources/jsonl"
@@ -89,6 +90,9 @@ func setup(t *testing.T) *store.Store {
 		t.Fatal(err)
 	}
 	if err := library.Build(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	if err := recommend.BuildGenre(ctx, st); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := embed.Run(ctx, st, demo.ThemeEmbedder{}, embed.Options{}); err != nil {

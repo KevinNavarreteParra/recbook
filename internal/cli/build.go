@@ -15,6 +15,7 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/authors"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
+	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/search"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
@@ -28,8 +29,8 @@ func newBuildCmd(g *globals) *cobra.Command {
 		Short: "Rebuild works, labels, tiers and the search index from everything ingested",
 		Long: "Rebuild every derived table from the contract tables: match records into\n" +
 			"works, derive dates, labels and tiers, pick the recording to offer for each\n" +
-			"work, and index everything for search. Safe to rerun; it never changes\n" +
-			"ingested data.\n\n" +
+			"work, weigh each work's subjects for the genre view, and index everything\n" +
+			"for search. Safe to rerun; it never changes ingested data.\n\n" +
 			"Reads <data dir>/match_overrides.csv if present and writes the matches\n" +
 			"worth checking to <data dir>/review/matches.csv, where <data dir> is the\n" +
 			"folder holding the database.",
@@ -66,6 +67,9 @@ func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) erro
 		return err
 	}
 	if err := library.Build(ctx, st); err != nil {
+		return err
+	}
+	if err := recommend.BuildGenre(ctx, st); err != nil {
 		return err
 	}
 	if err := search.Build(ctx, st); err != nil {

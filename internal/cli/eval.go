@@ -13,18 +13,23 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/KevinNavarreteParra/recbook/internal/eval"
+	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 )
 
 func newEvalCmd(g *globals) *cobra.Command {
-	var opts eval.Options
+	var (
+		opts        eval.Options
+		genreWeight float64
+	)
 	cmd := &cobra.Command{
 		Use:   "eval",
 		Short: "Measure recommendations by leave-one-out over the books I've finished",
 		Long: "Hold out each finished book the library lends, as if I hadn't read it,\n" +
 			"and see where recommendations rank it: from every other finished book at\n" +
 			"once (history), and from the best single one of them (one seed). The\n" +
-			"content view is compared with two baselines (books by authors I've\n" +
-			"finished; books on the shelves I read most from) and with chance.\n\n" +
+			"content and genre views, alone and blended, are compared with two\n" +
+			"baselines (books by authors I've finished; books on the shelves I read\n" +
+			"most from) and with chance.\n\n" +
 			"hit@N is the share of held-out books ranked in the top N; MRR is the mean\n" +
 			"of 1/rank. Baselines tie a lot, so theirs are expected values. Each book's\n" +
 			"ranks go to <data dir>/review/loo.csv, to compare runs. Needs `recbook\n" +
@@ -38,6 +43,7 @@ func newEvalCmd(g *globals) *cobra.Command {
 			defer st.Close()
 
 			fmt.Fprintln(cmd.ErrOrStderr(), "ranking the catalog against every finished book; this takes a few minutes")
+			opts.Blend = recommend.Blend{recommend.Content: 1, recommend.Genre: genreWeight}
 			rep, err := eval.Run(cmd.Context(), st, opts)
 			if err != nil {
 				return err
@@ -45,7 +51,7 @@ func newEvalCmd(g *globals) *cobra.Command {
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "held out %d finished books the library lends, one at a time\n", len(rep.Targets))
-			fmt.Fprintf(out, "seeds    the other finished books with a description (%d of %d)\n", rep.Seeds, rep.Finished)
+			fmt.Fprintf(out, "seeds    the other finished books with a description or subjects (%d of %d)\n", rep.Seeds, rep.Finished)
 			fmt.Fprintf(out, "pool     %d unread borrowable works\n\n", rep.Pool)
 
 			for _, protocol := range eval.Protocols {
@@ -81,6 +87,8 @@ func newEvalCmd(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().Float64Var(&genreWeight, "genre-weight", recommend.DefaultBlend[recommend.Genre],
+		"the blend's weight for genre, with content at 1")
 	cmd.Flags().BoolVar(&opts.Unweighted, "unweighted", false, "count every seed equally")
 	cmd.Flags().IntVar(&opts.PerAuthor, "per-author", 3, "at most this many results by one author, as in similar (0 for no cap)")
 	cmd.Flags().IntVar(&opts.MaxRank, "max-rank", 1000, "count a book ranked below this as missed")

@@ -13,9 +13,9 @@
 //     and the held-out book gets the best rank any of them gives it. This
 //     is query by example, with the best query I could have made.
 //
-// The content view is ranked by the real recommend code. Two baselines and
-// chance rank the same books from the same pool (baselines.sql), so the
-// numbers have something to beat.
+// The views (content, genre, and the blend of both) are ranked by the real
+// recommend code. Two baselines and chance rank the same books from the
+// same pool (baselines.sql), so the numbers have something to beat.
 package eval
 
 import (
@@ -42,7 +42,7 @@ var (
 // uses the same names.
 var (
 	Protocols = []string{"history", "one seed"}
-	Methods   = []string{"content", "same author", "same shelf", "random"}
+	Methods   = []string{"content", "genre", "blend", "same author", "same shelf", "random"}
 )
 
 // Cutoffs are the list lengths hit rates are reported at. The CLI shows 20
@@ -51,9 +51,10 @@ var Cutoffs = []int{10, 20, 50}
 
 // Options tune an evaluation run.
 type Options struct {
-	Model      string // embedding model; default embed.DefaultModel
-	Unweighted bool   // count every seed equally, ignoring tiers
-	PerAuthor  int    // as in recommend.Options; 0 for no cap
+	Model      string          // embedding model; default embed.DefaultModel
+	Blend      recommend.Blend // the "blend" method's weights; nil means recommend.DefaultBlend
+	Unweighted bool            // count every seed equally, ignoring tiers
+	PerAuthor  int             // as in recommend.Options; 0 for no cap
 	// MaxRank is how deep the history protocol looks; a book ranked below
 	// it counts as missed. 0 means 1000. The one-seed protocol looks as
 	// deep as a seed's ranking goes, recommend.PerSeed.
@@ -62,7 +63,7 @@ type Options struct {
 
 // Report is the result of a run.
 type Report struct {
-	Seeds    int // finished books with a vector, all used as seeds
+	Seeds    int // finished books with a description or subjects, all used as seeds
 	Finished int // finished books, with a vector or not
 	Pool     int // unread works that could be recommended
 	Results  []Result
@@ -154,6 +155,9 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 	if opts.MaxRank == 0 {
 		opts.MaxRank = 1000
 	}
+	if opts.Blend == nil {
+		opts.Blend = recommend.DefaultBlend
+	}
 
 	finished, targets, err := loadFinished(ctx, st, opts.Model)
 	if err != nil {
@@ -164,7 +168,7 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 	}
 
 	results := outcomes{}
-	seeds, err := rankContent(ctx, st, finished, targets, opts, results)
+	seeds, err := rankViews(ctx, st, finished, targets, opts, results)
 	if err != nil {
 		return nil, err
 	}
@@ -212,61 +216,93 @@ func loadFinished(ctx context.Context, st *store.Store, model string) ([]int64, 
 	return ids, targets, rows.Err()
 }
 
-// rankContent ranks each target by the content view under both protocols,
-// and returns how many seeds had a vector.
+// rankViews ranks each target by each view method under both protocols,
+// and returns how many seeds had anything to compare.
 //
-// It asks recommend for each seed's ranking once, deep enough that after
-// dropping the other finished books (which a real query would never
-// return) recommend.PerSeed remain. Then, for each target, it fuses those
-// rankings exactly as recommend.Similar would if that one book were unread.
-func rankContent(ctx context.Context, st *store.Store, finished []int64, targets []Target, opts Options, results outcomes) (int, error) {
+// It asks recommend for each seed's ranking in every view once, deep
+// enough that after dropping the other finished books (which a real query
+// would never return) recommend.PerSeed remain. Then, for each method and
+// target, it weighs and fuses those rankings exactly as recommend.Similar
+// would if that one book were unread.
+func rankViews(ctx context.Context, st *store.Store, finished []int64, targets []Target, opts Options, results outcomes) (int, error) {
 	seeds, err := recommend.LoadSeeds(ctx, st, opts.Model, finished)
 	if err != nil {
 		return 0, err
 	}
-	rankOpts := recommend.Options{Model: opts.Model, IncludeRead: true, MaxWaitDays: -1, Unweighted: opts.Unweighted}
+	every := recommend.Blend{}
+	for _, v := range recommend.Views {
+		every[v] = 1
+	}
+	rankOpts := recommend.Options{Views: every, Model: opts.Model, IncludeRead: true, MaxWaitDays: -1}
 	rankings, err := recommend.Rank(ctx, st, seeds, nil, rankOpts, recommend.PerSeed+len(finished))
 	if err != nil {
 		return 0, err
 	}
 
-	isFinished := map[int64]bool{}
+	f := fusion{targets: targets, opts: opts, index: map[int64]int{}, isFinished: map[int64]bool{}}
 	for _, id := range finished {
-		isFinished[id] = true
+		f.isFinished[id] = true
 	}
-	index := map[int64]int{} // target work id → position in targets
 	for i, t := range targets {
-		index[t.WorkID] = i
+		f.index[t.WorkID] = i
+	}
+	content, _ := recommend.ParseView("content")
+	genre, _ := recommend.ParseView("genre")
+	for _, m := range []struct {
+		method string
+		blend  recommend.Blend
+	}{{"content", content}, {"genre", genre}, {"blend", opts.Blend}} {
+		weighed := recommend.Weigh(rankings, recommend.Options{Views: m.blend, Unweighted: opts.Unweighted})
+		results.set("history", m.method, f.history(weighed))
+		results.set("one seed", m.method, f.oneSeed(weighed))
 	}
 
-	// History: every other seed's rankings, fused at once.
-	history := make([]outcome, len(targets))
-	for i, t := range targets {
+	seeded := map[int64]bool{}
+	for _, r := range rankings {
+		seeded[r.Seed.WorkID] = true
+	}
+	return len(seeded), nil
+}
+
+// fusion fuses rankings for each held-out target in turn.
+type fusion struct {
+	targets    []Target
+	opts       Options
+	index      map[int64]int  // target work id → position in targets
+	isFinished map[int64]bool // every finished book, target or not
+}
+
+// history fuses every other seed's rankings at once for each target.
+func (f fusion) history(rankings []recommend.Ranking) []outcome {
+	out := make([]outcome, len(f.targets))
+	for i, t := range f.targets {
 		var pos []recommend.Ranking
 		for _, r := range rankings {
 			if r.Seed.WorkID != t.WorkID { // held out: not a seed
-				pos = append(pos, holdOut(r, t.WorkID, isFinished))
+				pos = append(pos, holdOut(r, t.WorkID, f.isFinished))
 			}
 		}
-		history[i] = rankOf(t.WorkID, recommend.Fuse(pos, nil, recommend.Options{PerAuthor: opts.PerAuthor, Limit: opts.MaxRank}))
+		out[i] = rankOf(t.WorkID, recommend.Fuse(pos, nil, recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: f.opts.MaxRank}))
 	}
-	results.set("history", "content", history)
+	return out
+}
 
-	// One seed: each seed's rankings fused alone (a seed may have more than
-	// one, a view each), for every target they reach at all.
+// oneSeed fuses each seed's rankings alone (a seed has one per view), for
+// every target they reach at all, and keeps each target's best rank.
+func (f fusion) oneSeed(rankings []recommend.Ranking) []outcome {
 	bySeed := map[int64][]recommend.Ranking{}
 	for _, r := range rankings {
 		bySeed[r.Seed.WorkID] = append(bySeed[r.Seed.WorkID], r)
 	}
-	oneSeed := make([]outcome, len(targets))
-	for i := range oneSeed {
-		oneSeed[i] = missed
+	out := make([]outcome, len(f.targets))
+	for i := range out {
+		out[i] = missed
 	}
 	for seed, group := range bySeed {
 		reached := map[int64]bool{}
 		for _, r := range group {
 			for _, n := range r.Near {
-				if _, ok := index[n.WorkID]; ok && n.WorkID != seed {
+				if _, ok := f.index[n.WorkID]; ok && n.WorkID != seed {
 					reached[n.WorkID] = true
 				}
 			}
@@ -274,17 +310,15 @@ func rankContent(ctx context.Context, st *store.Store, finished []int64, targets
 		for t := range reached {
 			pos := make([]recommend.Ranking, len(group))
 			for j, r := range group {
-				pos[j] = holdOut(r, t, isFinished)
+				pos[j] = holdOut(r, t, f.isFinished)
 			}
-			o := rankOf(t, recommend.Fuse(pos, nil, recommend.Options{PerAuthor: opts.PerAuthor, Limit: recommend.PerSeed}))
-			if o.better(oneSeed[index[t]]) {
-				oneSeed[index[t]] = o
+			o := rankOf(t, recommend.Fuse(pos, nil, recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: recommend.PerSeed}))
+			if o.better(out[f.index[t]]) {
+				out[f.index[t]] = o
 			}
 		}
 	}
-	results.set("one seed", "content", oneSeed)
-
-	return len(bySeed), nil
+	return out
 }
 
 // holdOut returns r as a real query would have returned it with held

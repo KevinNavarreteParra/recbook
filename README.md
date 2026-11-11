@@ -44,6 +44,7 @@ go run ./cmd/recbook embed                           # on the GPU; the nightly j
 
 go run ./cmd/recbook search cold war berlin --available-now
 go run ./cmd/recbook similar --seed "tinker tailor" --seed "red october" --max-wait 14
+go run ./cmd/recbook similar --seed "tinker tailor" --view genre   # or content; default blend
 go run ./cmd/recbook backlog --available-now
 go run ./cmd/recbook author le carre                 # more by them, and authors like them
 
@@ -68,10 +69,16 @@ hadn't read it, and asks where recommendations would rank it. It asks in
 two ways: with every other finished book as a seed at once (*history*, a
 "for you" list), and with the best single one of them (*one seed*, query
 by example). Neither lets a similarity view choose the seeds, so views can
-be compared fairly. Each is scored against books by authors I've finished,
-books on the shelves I read most from, and chance, and every book's ranks
-go to `data/review/loo.csv` for comparing runs. Run it before and after a
-change to the ranking.
+be compared fairly. Each view (content, genre, and their blend, weighted by
+`--genre-weight`) is scored against books by authors I've finished, books
+on the shelves I read most from, and chance, and every book's ranks go to
+`data/review/loo.csv` for comparing runs. Run it before and after a change
+to the ranking.
+
+The views are content (embedded descriptions) and genre (the library's
+subjects, IDF-weighted). `similar` fuses one ranking per seed per view by
+reciprocal rank, so their scores needn't share a scale; the default blend,
+genre at 0.75 of content, is the weight `eval` liked best.
 
 ## Web app
 
@@ -119,7 +126,7 @@ and lists every problem.
 | `signals` | trusted dates, labels, provenance, signal tiers |
 | `library` | the one recording of each work to offer, and its availability |
 | `search` | keyword (BM25) search, and finding works by name |
-| `recommend` | books like a set of seeds, from the content vectors |
+| `recommend` | books like a set of seeds, from the content and genre views |
 | `authors` | who wrote what, each author's mean vector, and author queries |
 | `eval` | leave-one-out over finished books, against baselines |
 | `backlog` | owned or wanted books the library can lend |

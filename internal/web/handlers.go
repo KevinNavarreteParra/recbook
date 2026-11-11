@@ -149,13 +149,13 @@ func (s *Server) recommendPage(w http.ResponseWriter, r *http.Request) {
 		var skipped []string
 		for _, sd := range seeds {
 			p.Seeds = append(p.Seeds, seedChip{sd.WorkID, sd.Title, sd.Author})
-			if !sd.Embedded {
+			if sd.Skipped {
 				skipped = append(skipped, sd.Title)
 			}
 		}
 		view := &rowsView{Rows: s.recommendRows(recs), Empty: "No recommendations with these filters."}
 		if len(skipped) > 0 {
-			view.Caption = "Skipped (no description to compare): " + strings.Join(skipped, ", ")
+			view.Caption = "Skipped (nothing to compare): " + strings.Join(skipped, ", ")
 		}
 		p.Results = view
 	}
@@ -330,7 +330,7 @@ func (s *Server) recommendRows(recs []recommend.Rec) []row {
 			WorkID: r.WorkID, TitleID: r.TitleID, Title: r.Title, Author: r.Author, Narrator: r.Narrator,
 			Length: hoursMinutes(r.DurationMin, r.Abridged), Available: r.Available,
 			Availability: availability(r.Available, r.WaitDays, r.Holds), Mine: tierLabel(r.Tier),
-			Why: fmt.Sprintf("like %s (%.2f)", r.Like, r.Similarity), URL: r.URL,
+			Why: fmt.Sprintf("like %s (%s)", r.Like, r.SimilarityText()), URL: r.URL,
 		}))
 	}
 	return out
