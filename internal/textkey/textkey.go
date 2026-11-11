@@ -9,6 +9,7 @@ package textkey
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -70,6 +71,129 @@ func Author(name string) string {
 		key += " " + g[0][:1]
 	}
 	return key
+}
+
+// Person returns the key that names one person, for telling an author's
+// books apart from everyone else's (internal/authors). It is the whole
+// name, given names first, folded to ASCII and without punctuation:
+// "John le Carré", "John Le Carre" and "le Carré, John" are all
+// "john le carre", and "J.M. Barrie", "JM Barrie" and "Barrie, J. M." are
+// all "j m barrie". Suffixes ("Jr.", "Ph.D.", "MD") are dropped, and a
+// name written on both sides of the comma ("Plato, Plato", as LibraryThing
+// writes a single name) counts once. Placeholders such as "Anonymous" give
+// "".
+//
+// Unlike Author it keeps every name, because a catalog of 100k books has
+// dozens of J. Smiths. The price is that "James Matthew Barrie" and
+// "J. M. Barrie" stay apart: telling that pair from "Min Jin Lee" and
+// "M. J. Lee", who are two people, takes more than their names.
+func Person(name string) string {
+	var parts []string
+	for _, p := range strings.Split(fold(name), ",") {
+		if !isSuffix(p) {
+			parts = append(parts, p)
+		}
+	}
+	if len(parts) == 0 || IsPlaceholderAuthor(Author(name)) {
+		return ""
+	}
+
+	var given, family []string
+	if len(parts) == 1 {
+		names := nameWords(parts[0])
+		for len(names) > 1 && suffixes[names[len(names)-1]] {
+			names = names[:len(names)-1]
+		}
+		if len(names) == 0 {
+			return ""
+		}
+		given, family = names[:len(names)-1], names[len(names)-1:]
+	} else {
+		family, given = nameWords(parts[0]), nameWords(parts[1]) // "Last, First"
+		if slices.Equal(family, given) {
+			given = nil // "Plato, Plato"
+		}
+	}
+
+	var key []string
+	for _, g := range given {
+		key = append(key, initials(g)...)
+	}
+	return strings.Join(append(key, family...), " ")
+}
+
+// LikelySamePerson reports whether two Person keys look like one name
+// spelt two ways: the same words but one, and those two long and a letter
+// or two apart, as transliterations and typos are ("dostoyevsky" and
+// "dostoevsky", "hermann" and "herman"). It's a guess, good enough to keep
+// a person from being listed as similar to themselves, but not to merge
+// their books: "Mark Smith" and "Mary Smith" would pass.
+func LikelySamePerson(a, b string) bool {
+	aw, bw := strings.Fields(a), strings.Fields(b)
+	if a == b || len(aw) != len(bw) {
+		return false
+	}
+	differ := 0
+	for i := range aw {
+		if aw[i] == bw[i] {
+			continue
+		}
+		differ++
+		if differ > 1 || min(len(aw[i]), len(bw[i])) < 5 || editDistance(aw[i], bw[i]) > 2 {
+			return false
+		}
+	}
+	return true
+}
+
+// editDistance is the Levenshtein distance between two ASCII words: how
+// many letters must be inserted, deleted or changed to turn one into the
+// other. It keeps one row of the usual table at a time.
+func editDistance(a, b string) int {
+	row := make([]int, len(b)+1)
+	for j := range row {
+		row[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		diagonal := row[0] // the cell above and to the left
+		row[0] = i
+		for j := 1; j <= len(b); j++ {
+			change := diagonal
+			if a[i-1] != b[j-1] {
+				change++
+			}
+			diagonal = row[j]
+			row[j] = min(row[j]+1, row[j-1]+1, change)
+		}
+	}
+	return row[len(b)]
+}
+
+// nameWords splits a name into words, treating a dot like a space so that
+// "J.M." is two initials.
+func nameWords(s string) []string {
+	return strings.Fields(words(strings.ReplaceAll(s, ".", " ")))
+}
+
+// isSuffix reports whether a part of a name between commas is only
+// suffixes: "Jr.", "M.D.", "Ph.D.", "MD/PHD".
+func isSuffix(part string) bool {
+	ws := strings.Fields(words(strings.ReplaceAll(part, ".", "")))
+	for _, w := range ws {
+		if !suffixes[w] {
+			return false
+		}
+	}
+	return len(ws) > 0
+}
+
+// initials spells out a given name written as run-together initials, which
+// is how a short word with no vowels reads: "jm" → "j", "m".
+func initials(word string) []string {
+	if len(word) < 2 || len(word) > 3 || strings.ContainsAny(word, "aeiouy") {
+		return []string{word}
+	}
+	return strings.Split(word, "")
 }
 
 // IsPlaceholderAuthor reports whether an author key stands for no one in
