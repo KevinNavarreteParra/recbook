@@ -45,6 +45,7 @@ go run ./cmd/recbook embed                           # on the GPU; the nightly j
 go run ./cmd/recbook search cold war berlin --available-now
 go run ./cmd/recbook similar --seed "tinker tailor" --seed "red october" --max-wait 14
 go run ./cmd/recbook similar --seed "tinker tailor" --view genre   # or content; default blend
+go run ./cmd/recbook similar --seed "tinker tailor" --diversity 0.3 # range wider (MMR)
 go run ./cmd/recbook backlog --available-now
 go run ./cmd/recbook author le carre                 # more by them, and authors like them
 
@@ -78,7 +79,10 @@ to the ranking.
 The views are content (embedded descriptions) and genre (the library's
 subjects, IDF-weighted). `similar` fuses one ranking per seed per view by
 reciprocal rank, so their scores needn't share a scale; the default blend,
-genre at 0.75 of content, is the weight `eval` liked best.
+genre at 0.75 of content, is the weight `eval` liked best. `--diversity`
+then reorders the top 100 by maximal marginal relevance, trading closeness
+to the seeds for distance from what's already listed; `eval --diversity`
+measures what that costs.
 
 ## Web app
 

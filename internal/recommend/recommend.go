@@ -9,7 +9,8 @@
 // would, and two views blend without their similarities having to be on
 // one scale. Seeds count in proportion to their tier's weight. Works close
 // to an "avoid" seed are pushed down, and a cap per author keeps one
-// author from taking over the list. Similar runs both steps; the
+// author from taking over the list. Diversify can then trade some
+// closeness for variety (diversify.go). Similar runs every step; the
 // leave-one-out evaluation (internal/eval) runs them separately, so it can
 // rank each seed once and fuse many times.
 package recommend
@@ -108,14 +109,15 @@ type Options struct {
 	Seeds []int64 // works I want more like (see search.Find)
 	Avoid []int64 // works I want less like
 
-	Views        Blend  // the views to compare in; nil means DefaultBlend
-	Model        string // embedding model; default embed.DefaultModel
-	AvailableNow bool   // only what can be borrowed right now
-	MaxWaitDays  int    // only what's available within this many days; <0 for no limit
-	IncludeRead  bool   // also recommend books I've finished
-	Unweighted   bool   // count every seed equally, ignoring tiers
-	PerAuthor    int    // at most this many results by one author; 0 for no cap
-	Limit        int    // at most this many results; 0 means 20
+	Views        Blend   // the views to compare in; nil means DefaultBlend
+	Model        string  // embedding model; default embed.DefaultModel
+	AvailableNow bool    // only what can be borrowed right now
+	MaxWaitDays  int     // only what's available within this many days; <0 for no limit
+	IncludeRead  bool    // also recommend books I've finished
+	Unweighted   bool    // count every seed equally, ignoring tiers
+	PerAuthor    int     // at most this many results by one author; 0 for no cap
+	Diversity    float64 // 0..1: how much closeness to trade for variety (see Diversify)
+	Limit        int     // at most this many results; 0 means 20
 }
 
 func (o Options) blend() Blend {
@@ -229,7 +231,25 @@ func Similar(ctx context.Context, st *store.Store, opts Options) ([]Rec, []Seed,
 	if err != nil {
 		return nil, nil, err
 	}
-	return Fuse(pos, neg, opts), used, nil
+	if opts.Diversity <= 0 {
+		return Fuse(pos, neg, opts), used, nil
+	}
+
+	// Fuse a window deep enough for Diversify to choose from, then cut it.
+	limit := cmp.Or(opts.Limit, 20)
+	fuseOpts := opts
+	fuseOpts.Limit = max(limit, DiverseDepth)
+	recs := Fuse(pos, neg, fuseOpts)
+	ids := make([]int64, 0, len(recs))
+	for _, r := range recs[:min(len(recs), DiverseDepth)] {
+		ids = append(ids, r.WorkID)
+	}
+	vectors, err := LoadVectors(ctx, st, opts.Model, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	recs = Diversify(recs, vectors, opts.Diversity)
+	return recs[:min(len(recs), limit)], used, nil
 }
 
 // LoadSeeds looks up each work as a seed: its name, its tier's weight, its
@@ -244,13 +264,8 @@ func LoadSeeds(ctx context.Context, st *store.Store, model string, ids []int64) 
 		if err != nil {
 			return nil, fmt.Errorf("seed %d: %w (has `recbook build` run since the last embed?)", id, err)
 		}
-		if list, ok := vector.([]any); ok {
-			s.vector = make([]float32, len(list))
-			for i, x := range list {
-				s.vector[i] = x.(float32)
-			}
-			s.Embedded = true
-		}
+		s.vector = toFloats(vector)
+		s.Embedded = s.vector != nil
 		seeds = append(seeds, s)
 	}
 	return seeds, nil

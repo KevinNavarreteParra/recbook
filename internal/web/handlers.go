@@ -140,7 +140,7 @@ func (s *Server) recommendPage(w http.ResponseWriter, r *http.Request) {
 	if len(ids) > 0 {
 		recs, seeds, err := recommend.Similar(r.Context(), st, recommend.Options{
 			Seeds: ids, AvailableNow: f.AvailableNow, MaxWaitDays: f.maxWaitDays(),
-			IncludeRead: f.IncludeRead, PerAuthor: 3, Limit: 30,
+			IncludeRead: f.IncludeRead, PerAuthor: 3, Diversity: recommend.DefaultDiversity, Limit: 30,
 		})
 		if err != nil {
 			s.fail(w, err)

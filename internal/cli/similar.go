@@ -92,6 +92,8 @@ func newSimilarCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.IncludeRead, "include-read", false, "also recommend books I've finished")
 	cmd.Flags().BoolVar(&opts.Unweighted, "unweighted", false, "count every seed equally")
 	cmd.Flags().IntVar(&opts.PerAuthor, "per-author", 3, "at most this many results by one author (0 for no cap)")
+	cmd.Flags().Float64Var(&opts.Diversity, "diversity", recommend.DefaultDiversity,
+		"trade closeness for variety, 0..1: 0 for the closest matches, higher to range wider")
 	cmd.Flags().IntVar(&opts.Limit, "limit", 20, "show at most this many")
 	return cmd
 }

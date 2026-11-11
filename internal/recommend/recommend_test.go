@@ -113,6 +113,15 @@ func TestSimilar(t *testing.T) {
 		t.Errorf("PerAuthor 1: %q", got)
 	}
 
+	// Diversified, the second le Carré gives way to something unlike the first.
+	recs, _, err = Similar(ctx, st, Options{Seeds: []int64{tinker}, MaxWaitDays: -1, Diversity: 0.9, Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := titles(recs); len(got) != 2 || recs[0].Author != "John le Carré" || recs[1].Author == "John le Carré" {
+		t.Errorf("Diversity 0.9: %q", got)
+	}
+
 	// Mixed seeds get some of each.
 	recs, _, _ = Similar(ctx, st, Options{Seeds: []int64{tinker, redOctober}, MaxWaitDays: -1, Limit: 3})
 	if got := titles(recs); !strings.Contains(strings.Join(got, "|"), "Red Storm Rising") {

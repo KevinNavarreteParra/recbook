@@ -162,3 +162,13 @@ func TestRun(t *testing.T) {
 		}
 	}
 }
+
+func TestRunDiversified(t *testing.T) {
+	rep, err := Run(context.Background(), setup(t), Options{PerAuthor: 3, Diversity: 0.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Results) != len(Protocols)*len(Methods) {
+		t.Fatalf("%d results, want one per protocol and method", len(rep.Results))
+	}
+}

@@ -55,6 +55,7 @@ type Options struct {
 	Blend      recommend.Blend // the "blend" method's weights; nil means recommend.DefaultBlend
 	Unweighted bool            // count every seed equally, ignoring tiers
 	PerAuthor  int             // as in recommend.Options; 0 for no cap
+	Diversity  float64         // as in recommend.Options; 0 for none
 	// MaxRank is how deep the history protocol looks; a book ranked below
 	// it counts as missed. 0 means 1000. The one-seed protocol looks as
 	// deep as a seed's ranking goes, recommend.PerSeed.
@@ -246,6 +247,11 @@ func rankViews(ctx context.Context, st *store.Store, finished []int64, targets [
 	for i, t := range targets {
 		f.index[t.WorkID] = i
 	}
+	if opts.Diversity > 0 {
+		if f.vectors, err = loadVectors(ctx, st, opts.Model, rankings); err != nil {
+			return 0, err
+		}
+	}
 	content, _ := recommend.ParseView("content")
 	genre, _ := recommend.ParseView("genre")
 	for _, m := range []struct {
@@ -270,6 +276,38 @@ type fusion struct {
 	opts       Options
 	index      map[int64]int  // target work id → position in targets
 	isFinished map[int64]bool // every finished book, target or not
+	vectors    map[int64][]float32
+}
+
+// loadVectors loads the content vector of every work in the rankings, so
+// that fused lists can be diversified.
+func loadVectors(ctx context.Context, st *store.Store, model string, rankings []recommend.Ranking) (map[int64][]float32, error) {
+	seen := map[int64]bool{}
+	var ids []int64
+	for _, r := range rankings {
+		for _, n := range r.Near {
+			if !seen[n.WorkID] {
+				seen[n.WorkID] = true
+				ids = append(ids, n.WorkID)
+			}
+		}
+	}
+	return recommend.LoadVectors(ctx, st, model, ids)
+}
+
+// rank is where the target lands in the fused rankings, diversified as
+// recommend.Similar would. Diversify only reorders the top
+// recommend.DiverseDepth, so a target below that keeps its fused rank,
+// which saves diversifying most lists.
+func (f fusion) rank(target int64, pos []recommend.Ranking, limit int) outcome {
+	recs := recommend.Fuse(pos, nil, recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: limit})
+	if f.opts.Diversity > 0 {
+		if o := rankOf(target, recs); o.missed || o.higher >= recommend.DiverseDepth {
+			return o
+		}
+		recs = recommend.Diversify(recs, f.vectors, f.opts.Diversity)
+	}
+	return rankOf(target, recs)
 }
 
 // history fuses every other seed's rankings at once for each target.
@@ -282,7 +320,7 @@ func (f fusion) history(rankings []recommend.Ranking) []outcome {
 				pos = append(pos, holdOut(r, t.WorkID, f.isFinished))
 			}
 		}
-		out[i] = rankOf(t.WorkID, recommend.Fuse(pos, nil, recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: f.opts.MaxRank}))
+		out[i] = f.rank(t.WorkID, pos, f.opts.MaxRank)
 	}
 	return out
 }
@@ -312,7 +350,7 @@ func (f fusion) oneSeed(rankings []recommend.Ranking) []outcome {
 			for j, r := range group {
 				pos[j] = holdOut(r, t, f.isFinished)
 			}
-			o := rankOf(t, recommend.Fuse(pos, nil, recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: recommend.PerSeed}))
+			o := f.rank(t, pos, recommend.PerSeed)
 			if o.better(out[f.index[t]]) {
 				out[f.index[t]] = o
 			}

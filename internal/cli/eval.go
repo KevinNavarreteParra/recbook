@@ -90,6 +90,7 @@ func newEvalCmd(g *globals) *cobra.Command {
 	cmd.Flags().Float64Var(&genreWeight, "genre-weight", recommend.DefaultBlend[recommend.Genre],
 		"the blend's weight for genre, with content at 1")
 	cmd.Flags().BoolVar(&opts.Unweighted, "unweighted", false, "count every seed equally")
+	cmd.Flags().Float64Var(&opts.Diversity, "diversity", recommend.DefaultDiversity, "trade closeness for variety, 0..1, as in similar")
 	cmd.Flags().IntVar(&opts.PerAuthor, "per-author", 3, "at most this many results by one author, as in similar (0 for no cap)")
 	cmd.Flags().IntVar(&opts.MaxRank, "max-rank", 1000, "count a book ranked below this as missed")
 	return cmd
