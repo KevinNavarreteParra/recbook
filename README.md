@@ -45,6 +45,7 @@ go run ./cmd/recbook embed                           # on the GPU; the nightly j
 go run ./cmd/recbook search cold war berlin --available-now
 go run ./cmd/recbook similar --seed "tinker tailor" --seed "red october" --max-wait 14
 go run ./cmd/recbook backlog --available-now
+go run ./cmd/recbook author le carre                 # more by them, and authors like them
 
 go run ./cmd/recbook eval                            # how well it ranks books I finished
 ```
@@ -119,6 +120,7 @@ and lists every problem.
 | `library` | the one recording of each work to offer, and its availability |
 | `search` | keyword (BM25) search, and finding works by name |
 | `recommend` | books like a set of seeds, from the content vectors |
+| `authors` | who wrote what, each author's mean vector, and author queries |
 | `eval` | leave-one-out over finished books, against baselines |
 | `backlog` | owned or wanted books the library can lend |
 | `enrich` | descriptions from Google Books and Open Library for finished books |
