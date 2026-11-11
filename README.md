@@ -44,12 +44,26 @@ go run ./cmd/recbook embed                           # on the GPU; the nightly j
 go run ./cmd/recbook search cold war berlin --available-now
 go run ./cmd/recbook similar --seed "tinker tailor" --seed "red october" --max-wait 14
 go run ./cmd/recbook backlog --available-now
+
+go run ./cmd/recbook eval                            # how well it ranks books I finished
 ```
 
 Personal data lives in `data/` (gitignored). Hand corrections to matching go
 in `data/match_overrides.csv`, and `build` lists matches worth checking in
 `data/review/matches.csv`. There is no CI workflow: run `make check` before
 pushing.
+
+## Measuring it
+
+`recbook eval` holds out each finished book the library lends, as if I
+hadn't read it, and asks where recommendations would rank it. It asks in
+two ways: with every other finished book as a seed at once (*history*, a
+"for you" list), and with the best single one of them (*one seed*, query
+by example). Neither lets a similarity view choose the seeds, so views can
+be compared fairly. Each is scored against books by authors I've finished,
+books on the shelves I read most from, and chance, and every book's ranks
+go to `data/review/loo.csv` for comparing runs. Run it before and after a
+change to the ranking.
 
 ## Web app
 
@@ -95,6 +109,7 @@ and lists every problem.
 | `library` | the one recording of each work to offer, and its availability |
 | `search` | keyword (BM25) search, and finding works by name |
 | `recommend` | books like a set of seeds, from the content vectors |
+| `eval` | leave-one-out over finished books, against baselines |
 | `backlog` | owned or wanted books the library can lend |
 | `blurb`, `embed`, `ollama` | clean descriptions, embed them, run the local model |
 | `nightly` | the night window and GPU guard |
