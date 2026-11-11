@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KevinNavarreteParra/recbook/internal/authors"
 	"github.com/KevinNavarreteParra/recbook/internal/contract"
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
@@ -71,6 +72,9 @@ func app(t *testing.T) (*httptest.Server, string) {
 		}
 	}
 	if _, err := embed.Run(ctx, st, flatEmbedder{}, embed.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := authors.Build(ctx, st); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := filepath.Join(dir, "serve.duckdb")
@@ -165,6 +169,27 @@ func TestRecommendPage(t *testing.T) {
 	page := get(t, ts, "/similar?seed="+id)
 	if !strings.Contains(page, "like Tinker Tailor Soldier Spy") || !strings.Contains(page, `name="seed" value="`+id+`"`) {
 		t.Errorf("recommendations should say why, and keep the seed chosen:\n%s", page)
+	}
+}
+
+func TestAuthorPage(t *testing.T) {
+	ts, _ := app(t)
+	if results := get(t, ts, "/search?q=carre"); !strings.Contains(results, `href="/author?name=John%20le%20Carr%c3%a9"`) {
+		t.Errorf("result rows should link their author:\n%s", results)
+	}
+	page := get(t, ts, "/author?name=John+Le+Carre") // any spelling
+	if !strings.Contains(page, "More by John le Carré") || !strings.Contains(page, "Smiley") ||
+		strings.Contains(page, "Tinker Tailor") || !strings.Contains(page, "Similar authors") {
+		t.Errorf("the author page should list his unfinished books:\n%s", page)
+	}
+
+	resp, err := ts.Client().Get(ts.URL + "/author?name=nobody+at+all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("an unknown author: %s", resp.Status)
 	}
 }
 

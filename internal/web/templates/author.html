@@ -1,0 +1,26 @@
+{{define "content"}}
+{{with .Extra}}
+<div id="author">
+<form class="search" action="/author" method="get" hx-get="/author" hx-target="#author" hx-select="#author" hx-swap="outerHTML" hx-push-url="true" hx-trigger="change">
+  <input type="hidden" name="name" value="{{$.Query}}">
+  <h2>{{.Author.Name}}</h2>
+  <p class="caption">{{.Author.InCatalog}} in the catalog, {{.Author.Finished}} finished{{range .Spellings}} · maybe also credited as <a href="/author?name={{.Name}}">{{.Name}}</a>{{end}}</p>
+  <div class="filters">
+    <label><input type="checkbox" name="now" value="1"{{if $.Filters.AvailableNow}} checked{{end}}> available now</label>
+    {{template "wait-select" $.Filters.MaxWait}}
+    <label><input type="checkbox" name="read" value="1"{{if $.Filters.IncludeRead}} checked{{end}}> include books I've read</label>
+  </div>
+</form>
+
+<h3>More by {{.Author.Name}}</h3>
+{{template "results" .More}}
+
+<h3>Similar authors</h3>
+{{with .Note}}<p class="empty">{{.}}</p>{{end}}
+{{range .Similar}}
+<h4><a href="/author?name={{.Name}}">{{.Name}}</a> <span class="sub">{{printf "%.2f" .Similarity}} · {{.Embedded}} books{{if .Finished}} · {{.Finished}} finished{{end}}</span></h4>
+{{template "results" .Books}}
+{{end}}
+</div>
+{{end}}
+{{end}}

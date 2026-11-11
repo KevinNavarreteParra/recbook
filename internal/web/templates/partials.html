@@ -41,7 +41,7 @@
       {{with .Subtitle}}<div class="sub">{{.}}</div>{{end}}
       {{with .Why}}<div class="why">{{.}}</div>{{end}}
     </td>
-    <td class="author">{{.Author}}</td>
+    <td class="author">{{with .Author}}<a href="/author?name={{.}}">{{.}}</a>{{end}}</td>
     <td class="narrator">{{.Narrator}}</td>
     <td class="len nowrap">{{.Length}}</td>
     <td class="avail nowrap{{if .Available}} now{{end}}">{{.Availability}}</td>
