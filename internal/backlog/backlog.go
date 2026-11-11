@@ -11,8 +11,12 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
-//go:embed backlog.sql
-var backlogSQL string
+var (
+	//go:embed backlog.sql
+	backlogSQL string
+	//go:embed watch.sql
+	watchSQL string
+)
 
 // Options filters the list.
 type Options struct {
@@ -65,4 +69,24 @@ func List(ctx context.Context, st *store.Store, opts Options) ([]Entry, error) {
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// Watch returns the catalog ids of every recording of a backlog book in
+// library: the titles whose availability is worth refreshing between
+// crawls, since the backlog is where "available now" matters most.
+func Watch(ctx context.Context, st *store.Store, library string) ([]string, error) {
+	rows, err := st.DB().QueryContext(ctx, watchSQL, sql.Named("library", library))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

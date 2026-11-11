@@ -26,12 +26,13 @@ func newNightlyCmd(g *globals) *cobra.Command {
 		Use:   "nightly",
 		Short: "The scheduled job: refresh the catalog, rebuild, embed, within a night window",
 		Long: "Run the nightly upkeep, but only inside --window, stopping when it closes:\n\n" +
-			"  1. crawl the catalog again, if the last full crawl is older than --crawl-every\n" +
-			"  2. look up descriptions for finished books that have none (`recbook enrich`);\n" +
-			"     a failure here is reported and the night goes on\n" +
+			"  1. crawl the catalog again, if the last full crawl is older than --crawl-every;\n" +
+			"     otherwise refresh availability for the backlog alone (`recbook refresh`)\n" +
+			"  2. look up descriptions for finished books that have none (`recbook enrich`)\n" +
 			"  3. rebuild the derived tables, folding in the web app's tracker marks\n" +
 			"  4. embed whatever isn't embedded yet, on the GPU, if it's free\n" +
 			"  5. publish the result for the web app\n\n" +
+			"A failed refresh or enrich is reported and the night goes on.\n" +
 			"Every step saves as it goes, so whatever a night doesn't finish, the next\n" +
 			"night continues. Outside the window it does nothing. A systemd timer runs\n" +
 			"it (deploy/systemd).",
@@ -57,19 +58,29 @@ func newNightlyCmd(g *globals) *cobra.Command {
 			}
 			defer st.Close()
 
+			// A service being down shouldn't cost the night its build and embed.
+			goOn := func(name string, err error) error {
+				if err != nil && ctx.Err() == nil {
+					fmt.Fprintf(out, "nightly: %s failed, going on: %v\n", name, err)
+				}
+				return nil
+			}
+			crawled := false
 			steps := []struct {
 				name string
 				run  func() error
 			}{
-				{"crawl", func() error { return crawlIfDue(ctx, st, library, crawlEvery, out) }},
-				{"enrich", func() error {
-					// Google Books or Open Library being down shouldn't cost
-					// the night its build and embed.
-					if err := enrichSeeds(ctx, st, out); err != nil && ctx.Err() == nil {
-						fmt.Fprintln(out, "nightly: enrich failed, going on:", err)
-					}
-					return nil
+				{"crawl", func() (err error) {
+					crawled, err = crawlIfDue(ctx, st, library, crawlEvery, out)
+					return err
 				}},
+				{"refresh", func() error {
+					if crawled {
+						return nil // the crawl just read every title's availability
+					}
+					return goOn("refresh", refreshWatched(ctx, st, library, out))
+				}},
+				{"enrich", func() error { return goOn("enrich", enrichSeeds(ctx, st, out)) }},
 				{"build", func() error { return build(ctx, st, g, io.Discard) }},
 				{"embed", func() error { _, err := embedWorks(ctx, st, emb, out); return err }},
 			}
@@ -103,21 +114,21 @@ func newNightlyCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
-// crawlIfDue runs a full crawl when the last finished one is older than
-// every (or there is none).
-func crawlIfDue(ctx context.Context, st *store.Store, library string, every time.Duration, out io.Writer) error {
+// crawlIfDue runs a crawl when the last finished one is older than every
+// (or there is none), and reports whether it crawled.
+func crawlIfDue(ctx context.Context, st *store.Store, library string, every time.Duration, out io.Writer) (bool, error) {
 	if library == "" {
-		return errors.New("--library is required")
+		return false, errors.New("--library is required")
 	}
 	var last sql.NullTime
 	err := st.DB().QueryRowContext(ctx,
 		`SELECT max(finished_at) FROM crawl WHERE library = ? AND finished_at IS NOT NULL`, library).Scan(&last)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if last.Valid && time.Since(last.Time) < every {
 		fmt.Fprintf(out, "nightly: catalog crawled %s ago; not due\n", time.Since(last.Time).Truncate(time.Minute))
-		return nil
+		return false, nil
 	}
 	fmt.Fprintln(out, "nightly: crawling the catalog")
 	progress := func(p overdrive.Progress) {
@@ -125,5 +136,5 @@ func crawlIfDue(ctx context.Context, st *store.Store, library string, every time
 			fmt.Fprintf(out, "nightly: crawled partition %d/%d, %d titles so far\n", p.Partition, p.Partitions, p.Saved)
 		}
 	}
-	return crawl(ctx, st, crawlOptions{library: library}, progress, out)
+	return true, crawl(ctx, st, crawlOptions{library: library}, progress, out)
 }

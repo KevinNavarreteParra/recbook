@@ -86,4 +86,15 @@ func TestList(t *testing.T) {
 	if got := titles(Options{MaxWaitDays: -1, Limit: 2}); len(got) != 2 {
 		t.Errorf("--limit 2 = %q", got)
 	}
+
+	// Watch: every recording of those seven books, the unoffered
+	// Karamazov and Moscow recordings included, and nothing else.
+	ids, err := Watch(ctx, st, demo.Library)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIDs := []string{"9003", "9004", "9010", "9011", "9012", "9014", "9015", "9019", "9021", "9022"}
+	if !slices.Equal(ids, wantIDs) {
+		t.Errorf("Watch =\n  %q\nwant\n  %q", ids, wantIDs)
+	}
 }

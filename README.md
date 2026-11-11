@@ -86,9 +86,11 @@ operator.
 
 ## Nightly job
 
-`recbook nightly` re-crawls the catalog once a week, looks up descriptions
-for newly finished books (`enrich`), rebuilds, and embeds any new
-descriptions on the GPU. A systemd user timer starts it at 02:00
+`recbook nightly` re-crawls the catalog once a week, and on the other
+nights refreshes availability for the backlog alone (`refresh`: every
+recording of a book I own or want, two requests for ~175 titles). It then
+looks up descriptions for newly finished books (`enrich`), rebuilds, and
+embeds any new descriptions on the GPU. A systemd user timer starts it at 02:00
 (`make nightly-install`; units in `deploy/systemd`). It does nothing outside
 02:00-06:00 and stops when the window closes. It won't start while the GPU
 is busy and backs off if a game starts. Ollama runs only for the length of
