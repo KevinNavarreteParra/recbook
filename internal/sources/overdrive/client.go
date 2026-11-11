@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/time/rate"
+	"github.com/KevinNavarreteParra/recbook/internal/polite"
 )
 
 // Config says which library to read and how politely.
@@ -62,22 +62,18 @@ func NewClient(cfg Config) *Client {
 		cfg.RetryDelay = time.Second
 	}
 
-	base := http.DefaultTransport
-	if cfg.HTTPClient != nil && cfg.HTTPClient.Transport != nil {
+	var base http.RoundTripper
+	if cfg.HTTPClient != nil {
 		base = cfg.HTTPClient.Transport
 	}
 	return &Client{
 		cfg: cfg,
-		http: &http.Client{
-			Timeout: 60 * time.Second,
-			Transport: &politeTransport{
-				next:       base,
-				limiter:    rate.NewLimiter(rate.Limit(cfg.RequestsPerSecond), 1),
-				userAgent:  cfg.UserAgent,
-				maxRetries: 4,
-				retryDelay: cfg.RetryDelay,
-			},
-		},
+		http: polite.NewClient(polite.Config{
+			UserAgent:         cfg.UserAgent,
+			RequestsPerSecond: cfg.RequestsPerSecond,
+			RetryDelay:        cfg.RetryDelay,
+			Base:              base,
+		}),
 	}
 }
 
