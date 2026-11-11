@@ -27,9 +27,11 @@ func newNightlyCmd(g *globals) *cobra.Command {
 		Short: "The scheduled job: refresh the catalog, rebuild, embed, within a night window",
 		Long: "Run the nightly upkeep, but only inside --window, stopping when it closes:\n\n" +
 			"  1. crawl the catalog again, if the last full crawl is older than --crawl-every\n" +
-			"  2. rebuild the derived tables, folding in the web app's tracker marks\n" +
-			"  3. embed whatever isn't embedded yet, on the GPU, if it's free\n" +
-			"  4. publish the result for the web app\n\n" +
+			"  2. look up descriptions for finished books that have none (`recbook enrich`);\n" +
+			"     a failure here is reported and the night goes on\n" +
+			"  3. rebuild the derived tables, folding in the web app's tracker marks\n" +
+			"  4. embed whatever isn't embedded yet, on the GPU, if it's free\n" +
+			"  5. publish the result for the web app\n\n" +
 			"Every step saves as it goes, so whatever a night doesn't finish, the next\n" +
 			"night continues. Outside the window it does nothing. A systemd timer runs\n" +
 			"it (deploy/systemd).",
@@ -60,6 +62,14 @@ func newNightlyCmd(g *globals) *cobra.Command {
 				run  func() error
 			}{
 				{"crawl", func() error { return crawlIfDue(ctx, st, library, crawlEvery, out) }},
+				{"enrich", func() error {
+					// Google Books or Open Library being down shouldn't cost
+					// the night its build and embed.
+					if err := enrichSeeds(ctx, st, out); err != nil && ctx.Err() == nil {
+						fmt.Fprintln(out, "nightly: enrich failed, going on:", err)
+					}
+					return nil
+				}},
 				{"build", func() error { return build(ctx, st, g, io.Discard) }},
 				{"embed", func() error { _, err := embedWorks(ctx, st, emb, out); return err }},
 			}

@@ -38,6 +38,7 @@ go run ./cmd/recbook ingest readinglist  data/exports/readinglist.csv
 go run ./cmd/recbook ingest libby        data/exports/libby-timeline.json
 go run ./cmd/recbook ingest librarything data/exports/librarything.json
 go run ./cmd/recbook crawl --library lasvegas        # the key in libbyapp.com/library/<key>
+go run ./cmd/recbook enrich                          # describe finished books no source describes
 go run ./cmd/recbook build
 go run ./cmd/recbook embed                           # on the GPU; the nightly job keeps it current
 
@@ -52,6 +53,12 @@ Personal data lives in `data/` (gitignored). Hand corrections to matching go
 in `data/match_overrides.csv`, and `build` lists matches worth checking in
 `data/review/matches.csv`. There is no CI workflow: run `make check` before
 pushing.
+
+A finished book with no description can't be a seed. `enrich` looks those
+up in Google Books, then Open Library, and saves what it finds as the shelf
+`enrich`; every answer is cached, so each book is asked about once. Google
+Books usually refuses requests without an API key, which can be given in
+`RECBOOK_GOOGLE_BOOKS_KEY`.
 
 ## Measuring it
 
@@ -79,8 +86,9 @@ operator.
 
 ## Nightly job
 
-`recbook nightly` re-crawls the catalog once a week, rebuilds, and embeds
-any new descriptions on the GPU. A systemd user timer starts it at 02:00
+`recbook nightly` re-crawls the catalog once a week, looks up descriptions
+for newly finished books (`enrich`), rebuilds, and embeds any new
+descriptions on the GPU. A systemd user timer starts it at 02:00
 (`make nightly-install`; units in `deploy/systemd`). It does nothing outside
 02:00-06:00 and stops when the window closes. It won't start while the GPU
 is busy and backs off if a game starts. Ollama runs only for the length of
@@ -111,6 +119,8 @@ and lists every problem.
 | `recommend` | books like a set of seeds, from the content vectors |
 | `eval` | leave-one-out over finished books, against baselines |
 | `backlog` | owned or wanted books the library can lend |
+| `enrich` | descriptions from Google Books and Open Library for finished books |
+| `polite` | the rate-limited, retrying HTTP client every online source uses |
 | `blurb`, `embed`, `ollama` | clean descriptions, embed them, run the local model |
 | `nightly` | the night window and GPU guard |
 | `web` | the web app and its tracker |

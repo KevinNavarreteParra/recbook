@@ -5,8 +5,9 @@
 // hold what sources reported, and only this package writes them. Derived
 // tables are rebuilt from scratch by packages like resolve and signals, each
 // from SQL that lives next to the Go that runs it, via RunScript. Caches of
-// slow work, such as embeddings (migrations/002_embedding.sql), are kept
-// across rebuilds and only ever added to.
+// slow work, such as embeddings (migrations/002_embedding.sql) and
+// description lookups (003_description_lookup.sql), are kept across
+// rebuilds and only ever added to.
 package store
 
 import (
