@@ -28,6 +28,7 @@ func Execute() error {
 // globals are the flags every command shares.
 type globals struct {
 	dbPath string
+	lang   string // --lang, as given; see languages
 }
 
 func newRootCmd() *cobra.Command {
@@ -41,6 +42,8 @@ func newRootCmd() *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringVar(&g.dbPath, "db", envOr("RECBOOK_DB", "data/recbook.duckdb"),
 		"DuckDB database file (env RECBOOK_DB)")
+	root.PersistentFlags().StringVar(&g.lang, "lang", envOr("RECBOOK_LANGUAGES", "en"),
+		"languages I listen in, best first: ISO 639-1 codes like \"en,es\", or \"any\" (env RECBOOK_LANGUAGES)")
 
 	root.AddCommand(
 		newIngestCmd(g),
@@ -65,6 +68,22 @@ func newRootCmd() *cobra.Command {
 // openStore opens the database named by --db.
 func (g *globals) openStore(ctx context.Context) (*store.Store, error) {
 	return store.Open(ctx, g.dbPath)
+}
+
+// languages are the --lang codes, lowercased, or nil for "any". Building
+// uses them to choose the recording to offer and the description to embed
+// for each work; search, similar and author keep only recordings in them.
+func (g *globals) languages() []string {
+	if strings.EqualFold(strings.TrimSpace(g.lang), "any") {
+		return nil
+	}
+	var codes []string
+	for _, code := range strings.Split(g.lang, ",") {
+		if code = strings.ToLower(strings.TrimSpace(code)); code != "" {
+			codes = append(codes, code)
+		}
+	}
+	return codes
 }
 
 // dataDir is the folder holding the database. Hand-kept files (match

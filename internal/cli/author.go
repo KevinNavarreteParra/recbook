@@ -41,6 +41,7 @@ func newAuthorCmd(g *globals) *cobra.Command {
 			if len(found) == 0 {
 				return fmt.Errorf("no author matches %q; try their surname alone", name)
 			}
+			opts.Languages = g.languages()
 			res, err := authors.Lookup(ctx, st, found[0].ID, opts)
 			if err != nil {
 				return err

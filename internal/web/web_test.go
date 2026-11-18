@@ -54,10 +54,14 @@ func app(t *testing.T) (*httptest.Server, string) {
 	for i := range titles {
 		titles[i].Description = "A story about " + titles[i].Title + "."
 	}
-	// A hostile title, to check that everything is escaped.
-	titles = append(titles, contract.CatalogTitle{ID: "666", Title: `<script>alert(1)</script> Spy Story`,
-		Format: contract.Audiobook, Creators: []contract.Creator{{Name: "Mallory", Role: contract.Author}}})
-	avail = append(avail, contract.Availability{TitleID: "666", Available: true, CopiesOwned: 1, CopiesAvailable: 1})
+	// A hostile title, to check that everything is escaped, and a le Carré
+	// in Spanish, which the app (set to English) never shows.
+	titles = append(titles, contract.CatalogTitle{ID: "666", Title: `<script>alert(1)</script> Spy Story`, Language: "en",
+		Format: contract.Audiobook, Creators: []contract.Creator{{Name: "Mallory", Role: contract.Author}}},
+		contract.CatalogTitle{ID: "667", Title: "El topo", Language: "es", Description: "A story about El topo.",
+			Format: contract.Audiobook, Creators: []contract.Creator{{Name: "John le Carré", Role: contract.Author}}})
+	avail = append(avail, contract.Availability{TitleID: "666", Available: true, CopiesOwned: 1, CopiesAvailable: 1},
+		contract.Availability{TitleID: "667", Available: true, CopiesOwned: 1, CopiesAvailable: 1})
 	if err := st.SaveCatalog(ctx, demo.Library, titles, avail, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +70,8 @@ func app(t *testing.T) (*httptest.Server, string) {
 	}
 	for _, step := range []func(context.Context, *store.Store) error{
 		func(ctx context.Context, st *store.Store) error { return signals.Run(ctx, st, signals.Options{}) },
-		library.Build, recommend.BuildGenre, search.Build,
+		func(ctx context.Context, st *store.Store) error { return library.Build(ctx, st, []string{"en"}) },
+		recommend.BuildGenre, search.Build,
 	} {
 		if err := step(ctx, st); err != nil {
 			t.Fatal(err)
@@ -84,7 +89,7 @@ func app(t *testing.T) (*httptest.Server, string) {
 	}
 
 	trackerPath := filepath.Join(dir, "tracker.jsonl")
-	srv, err := New(ctx, snapshot, trackerPath)
+	srv, err := New(ctx, snapshot, trackerPath, []string{"en"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +146,9 @@ func TestPages(t *testing.T) {
 	if !strings.Contains(page, "<html") || !strings.Contains(page, "Smiley") {
 		t.Errorf("a direct search should render the whole page with results")
 	}
+	if strings.Contains(page, "El topo") {
+		t.Errorf("search should show only recordings in my languages:\n%s", page)
+	}
 	partial := get(t, ts, "/search?q=carre", "HX-Request", "true", "HX-Target", "results")
 	if strings.Contains(partial, "<html") || !strings.Contains(partial, "Smiley") {
 		t.Errorf("an htmx search should render only the results")
@@ -182,6 +190,9 @@ func TestAuthorPage(t *testing.T) {
 	if !strings.Contains(page, "More by John le Carré") || !strings.Contains(page, "Smiley") ||
 		strings.Contains(page, "Tinker Tailor") || !strings.Contains(page, "Similar authors") {
 		t.Errorf("the author page should list his unfinished books:\n%s", page)
+	}
+	if strings.Contains(page, "El topo") {
+		t.Errorf("the author page should show only recordings in my languages:\n%s", page)
 	}
 
 	resp, err := ts.Client().Get(ts.URL + "/author?name=nobody+at+all")

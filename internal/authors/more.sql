@@ -10,5 +10,6 @@ WHERE aw.author_id = $author
   AND ($include_read OR NOT coalesce(s.finished, false))
   AND (b.available OR NOT $available_now)
   AND (b.available OR $max_wait < 0 OR b.wait_days <= $max_wait)
+  AND (len($languages::VARCHAR[]) = 0 OR list_contains($languages::VARCHAR[], b.language))
 ORDER BY b.available DESC, b.wait_days NULLS LAST, b.title
 LIMIT $limit

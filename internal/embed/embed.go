@@ -63,6 +63,10 @@ type Options struct {
 	// Progress, if set, is called after each batch with how many texts this
 	// run has embedded and how many it set out to.
 	Progress func(done, total int)
+
+	// Languages are the languages I listen in (ISO 639-1 codes, "en"),
+	// whose descriptions are chosen first (see WriteTexts).
+	Languages []string
 }
 
 // Texts summarizes work_text.
@@ -90,7 +94,7 @@ func Run(ctx context.Context, st *store.Store, e Embedder, opts Options) (Report
 
 	var rep Report
 	var err error
-	if rep.Texts, err = WriteTexts(ctx, st); err != nil {
+	if rep.Texts, err = WriteTexts(ctx, st, opts.Languages); err != nil {
 		if ctx.Err() != nil { // the window closed before there was anything to embed
 			return Report{Stopped: ctx.Err()}, nil
 		}
@@ -152,25 +156,35 @@ func Run(ctx context.Context, st *store.Store, e Embedder, opts Options) (Report
 }
 
 // WriteTexts chooses and cleans each work's text and rebuilds work_text.
-func WriteTexts(ctx context.Context, st *store.Store) (Texts, error) {
+// A description in one of languages (nil for any) is chosen over one in
+// another language (describe.sql).
+func WriteTexts(ctx context.Context, st *store.Store, languages []string) (Texts, error) {
 	type row struct {
-		workID           int64
-		side, text, hash string
-		thin             bool
+		workID             int64
+		source, text, hash string
+		language           any // a string, or nil when the source doesn't record one
+		thin               bool
 	}
 	var rows []row
 
-	q, err := st.DB().QueryContext(ctx, describeSQL)
+	if languages == nil {
+		languages = []string{} // nil would reach DuckDB as NULL
+	}
+	q, err := st.DB().QueryContext(ctx, describeSQL, sql.Named("languages", languages))
 	if err != nil {
 		return Texts{}, err
 	}
 	for q.Next() {
 		var r row
 		var title, description string
+		var language sql.NullString
 		var onShelf bool
-		if err := q.Scan(&r.workID, &title, &description, &r.side, &onShelf); err != nil {
+		if err := q.Scan(&r.workID, &title, &description, &r.source, &language, &onShelf); err != nil {
 			q.Close()
 			return Texts{}, err
+		}
+		if language.Valid {
+			r.language = language.String
 		}
 		cleaned := blurb.Clean(description)
 		r.text = title + ". " + cleaned
@@ -189,7 +203,7 @@ func WriteTexts(ctx context.Context, st *store.Store) (Texts, error) {
 	var t Texts
 	err = st.AppendRows(ctx, "work_text", func(add func(...any) error) error {
 		for _, r := range rows {
-			if err := add(r.workID, r.side, r.text, r.hash, r.thin); err != nil {
+			if err := add(r.workID, r.source, r.language, r.text, r.hash, r.thin); err != nil {
 				return err
 			}
 			t.Works++

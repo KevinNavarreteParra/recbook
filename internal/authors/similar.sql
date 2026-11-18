@@ -45,6 +45,7 @@ book AS (
       AND ($include_read OR NOT coalesce(s.finished, false))
       AND (b.available OR NOT $available_now)
       AND (b.available OR $max_wait < 0 OR b.wait_days <= $max_wait)
+  AND (len($languages::VARCHAR[]) = 0 OR list_contains($languages::VARCHAR[], b.language))
     QUALIFY row_number() OVER (PARTITION BY n.author_id ORDER BY similarity DESC, b.work_id) <= $per_author
 ),
 ranked AS (

@@ -31,7 +31,7 @@ func TestList(t *testing.T) {
 	if err := signals.Run(ctx, st, signals.Options{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := library.Build(ctx, st); err != nil {
+	if err := library.Build(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 

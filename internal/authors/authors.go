@@ -159,6 +159,11 @@ type Options struct {
 	Authors      int    // how many similar authors; 0 means 10
 	PerAuthor    int    // books shown for each similar author; 0 means 3
 	Limit        int    // books in "more by"; 0 means 50
+
+	// Languages keeps only recordings in these languages (ISO 639-1
+	// codes, "en"); nil keeps every language. A similar author with no
+	// books left drops out.
+	Languages []string
 }
 
 // Book is one borrowable book, in the recording the library would lend.
@@ -219,6 +224,9 @@ func Lookup(ctx context.Context, st *store.Store, id string, opts Options) (*Res
 	if opts.Limit == 0 {
 		opts.Limit = 50
 	}
+	if opts.Languages == nil {
+		opts.Languages = []string{} // nil would reach DuckDB as NULL and keep nothing
+	}
 
 	res := &Result{}
 	a := &res.Author
@@ -233,6 +241,7 @@ func Lookup(ctx context.Context, st *store.Store, id string, opts Options) (*Res
 		sql.Named("include_read", opts.IncludeRead),
 		sql.Named("available_now", opts.AvailableNow),
 		sql.Named("max_wait", opts.MaxWaitDays),
+		sql.Named("languages", opts.Languages),
 	}
 	res.More, err = moreBy(ctx, st.DB(), slices.Concat(filters, []any{sql.Named("limit", opts.Limit)}))
 	if err != nil {

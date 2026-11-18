@@ -63,6 +63,14 @@ up in Google Books, then Open Library, and saves what it finds as the shelf
 Books usually refuses requests without an API key, which can be given in
 `RECBOOK_GOOGLE_BOOKS_KEY`.
 
+Results are in the languages I listen in: English, unless `--lang` (or
+`RECBOOK_LANGUAGES`) says `en,es`, say, or `any`. `build` offers each book
+in the first of them the library has it in, and describes it in one of them
+where any source does, so a book the library has only in Spanish still
+finds English books like it. `search`, `similar`, `author` and the web app
+show only recordings in those languages. The backlog shows every language,
+since I chose its books myself.
+
 ## Measuring it
 
 `recbook eval` holds out each finished book the library lends, as if I

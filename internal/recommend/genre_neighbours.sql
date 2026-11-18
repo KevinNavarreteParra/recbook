@@ -21,5 +21,6 @@ WHERE NOT list_contains($exclude::BIGINT[], b.work_id)
   AND ($include_read OR NOT coalesce(s.finished, false))
   AND (b.available OR NOT $available_now)
   AND (b.available OR $max_wait < 0 OR b.wait_days <= $max_wait)
+  AND (len($languages::VARCHAR[]) = 0 OR list_contains($languages::VARCHAR[], b.language))
 ORDER BY n.similarity DESC, hash(b.work_id)
 LIMIT $k

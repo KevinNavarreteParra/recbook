@@ -25,8 +25,10 @@ func newSimilarCmd(g *globals) *cobra.Command {
 			"Name each seed by a few words of its title and author; books on my shelf\n" +
 			"are matched first. Seeds count by their tier (a book I own and finished\n" +
 			"counts more), unless --unweighted. --view compares descriptions (content),\n" +
-			"the library's subjects (genre), or both, fused (blend). Each result says\n" +
-			"which seed it's closest to. Needs `recbook build` and `recbook embed`.",
+			"the library's subjects (genre), or both, fused (blend). Only recordings in\n" +
+			"the --lang languages are recommended. Each seed says where its description\n" +
+			"came from, and each result which seed it's closest to. Needs `recbook\n" +
+			"build` and `recbook embed`.",
 		Example: `  recbook similar --seed "tinker tailor" --seed "red october" --available-now
   recbook similar --seed "brothers karamazov" --not "da vinci code" --per-author 1`,
 		Args: cobra.NoArgs,
@@ -38,7 +40,7 @@ func newSimilarCmd(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			opts.Views = blend
+			opts.Views, opts.Languages = blend, g.languages()
 			ctx := cmd.Context()
 			st, err := g.openStore(ctx)
 			if err != nil {
@@ -46,10 +48,10 @@ func newSimilarCmd(g *globals) *cobra.Command {
 			}
 			defer st.Close()
 
-			if opts.Seeds, err = resolveSeeds(ctx, st, seeds); err != nil {
+			if opts.Seeds, err = resolveSeeds(ctx, st, seeds, opts.Languages); err != nil {
 				return err
 			}
-			if opts.Avoid, err = resolveSeeds(ctx, st, avoid); err != nil {
+			if opts.Avoid, err = resolveSeeds(ctx, st, avoid, opts.Languages); err != nil {
 				return err
 			}
 			recs, used, err := recommend.Similar(ctx, st, opts)
@@ -64,6 +66,12 @@ func newSimilarCmd(g *globals) *cobra.Command {
 					role = "avoid"
 				}
 				note := fmt.Sprintf("weight %.2f", s.Weight)
+				switch {
+				case s.Embedded:
+					note += "; described by " + described(s)
+				case s.TextSource != "":
+					note += "; description by " + described(s) + " not embedded yet"
+				}
 				if s.Skipped {
 					note = "nothing to compare in this view, skipped"
 				}
@@ -98,11 +106,26 @@ func newSimilarCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
-// resolveSeeds turns each seed's name into a work, using the first match.
-func resolveSeeds(ctx context.Context, st *store.Store, names []string) ([]int64, error) {
+// described says where a seed's description came from, and its language:
+// "the catalog (es)". A seed described in another language than mine finds
+// books in that language.
+func described(s recommend.Seed) string {
+	from := s.TextSource
+	if from == "catalog" {
+		from = "the catalog"
+	}
+	if s.TextLanguage != "" {
+		from += " (" + s.TextLanguage + ")"
+	}
+	return from
+}
+
+// resolveSeeds turns each seed's name into a work, using the first match
+// (search.Find: books on my shelf, then in my languages).
+func resolveSeeds(ctx context.Context, st *store.Store, names []string, languages []string) ([]int64, error) {
 	var ids []int64
 	for _, name := range names {
-		works, err := search.Find(ctx, st, name)
+		works, err := search.Find(ctx, st, name, languages)
 		if err != nil {
 			return nil, err
 		}

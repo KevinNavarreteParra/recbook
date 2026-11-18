@@ -24,6 +24,7 @@ WHERE hit.s_all IS NOT NULL
   AND ($include_read OR NOT coalesce(s.finished, false))
   AND (b.available OR NOT $available_now)
   AND (b.available OR $max_wait < 0 OR b.wait_days <= $max_wait)
+  AND (len($languages::VARCHAR[]) = 0 OR list_contains($languages::VARCHAR[], b.language))
   AND ($min_minutes <= 0 OR b.duration_min >= $min_minutes)
   AND ($max_minutes <= 0 OR b.duration_min <= $max_minutes)
 ORDER BY score DESC, b.available DESC

@@ -82,7 +82,7 @@ func newNightlyCmd(g *globals) *cobra.Command {
 				}},
 				{"enrich", func() error { return goOn("enrich", enrichSeeds(ctx, st, out)) }},
 				{"build", func() error { return build(ctx, st, g, io.Discard) }},
-				{"embed", func() error { _, err := embedWorks(ctx, st, emb, out); return err }},
+				{"embed", func() error { _, err := embedWorks(ctx, st, g.languages(), emb, out); return err }},
 			}
 			// Whatever happens, publish what was done for the web app. The
 			// window may have closed, so this gets a little time of its own.

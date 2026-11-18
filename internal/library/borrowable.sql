@@ -1,7 +1,13 @@
 -- borrowable: one row per work the library has as an audiobook, holding
 -- the single recording to offer and its availability as of the last crawl.
--- The full text beats an abridged or dramatized version even if it means a
--- wait; then available now, the shortest wait, the longest running time.
+-- A recording in the first of my languages (the variable languages, best
+-- first) beats one in a later language, and any of them beats one in a
+-- language I didn't list. Then the full text beats an abridged or
+-- dramatized version even if it means a wait; then available now, the
+-- shortest wait, the longest running time.
+--
+-- A work is offered in one language only, so a query asking for a
+-- language I didn't list here may miss a recording the library has in it.
 CREATE OR REPLACE TABLE borrowable AS
 WITH recording AS (
     SELECT
@@ -10,7 +16,7 @@ WITH recording AS (
         ct.title, ct.subtitle,
         coalesce(list_filter(ct.creators, lambda c: c.role = 'author')[1].name, ct.creators[1].name) AS author,
         list_filter(ct.creators, lambda c: c.role = 'narrator')[1].name AS narrator,
-        ct.duration_min, ct.url,
+        ct.language, ct.duration_min, ct.url,
         coalesce(a.available, false) AS available,
         a.wait_days, a.holds,
         -- Not the whole book as written. Labels seen in a real catalog:
@@ -29,4 +35,4 @@ SELECT *, count(*) OVER (PARTITION BY work_id) AS recordings
 FROM recording
 QUALIFY row_number() OVER (
     PARTITION BY work_id
-    ORDER BY abridged, available DESC, wait_days NULLS LAST, duration_min DESC NULLS LAST, title_id) = 1;
+    ORDER BY list_position(getvariable('languages'), language) NULLS LAST, abridged, available DESC, wait_days NULLS LAST, duration_min DESC NULLS LAST, title_id) = 1;

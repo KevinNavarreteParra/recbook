@@ -35,7 +35,7 @@ func newEmbedCmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			if _, err := embedWorks(cmd.Context(), st, opts, cmd.OutOrStdout()); err != nil {
+			if _, err := embedWorks(cmd.Context(), st, g.languages(), opts, cmd.OutOrStdout()); err != nil {
 				return err
 			}
 			return st.Snapshot(cmd.Context(), g.servePath()) // so the web app sees the new vectors
@@ -60,8 +60,9 @@ func addEmbedFlags(cmd *cobra.Command, opts *embedOptions) {
 
 // embedWorks runs the embedding step with the GPU guard: claim the GPU,
 // bring up Ollama, make sure the model is there, embed, shut Ollama down.
-// A busy GPU or a closing window ends it early without an error.
-func embedWorks(ctx context.Context, st *store.Store, opts embedOptions, out io.Writer) (embed.Report, error) {
+// A busy GPU or a closing window ends it early without an error. Texts are
+// chosen as build chooses them, preferring languages.
+func embedWorks(ctx context.Context, st *store.Store, languages []string, opts embedOptions, out io.Writer) (embed.Report, error) {
 	guard, err := nightly.Claim(ctx)
 	if err != nil {
 		fmt.Fprintln(out, "embed:", err)
@@ -101,7 +102,7 @@ func embedWorks(ctx context.Context, st *store.Store, opts embedOptions, out io.
 	}
 
 	rep, err := embed.Run(ctx, st, server, embed.Options{
-		Model: model, Prefix: opts.prefix, Limit: opts.limit, Progress: progress,
+		Model: model, Prefix: opts.prefix, Limit: opts.limit, Progress: progress, Languages: languages,
 		Between: func(ctx context.Context) error {
 			vram, err := server.VRAMBytes(ctx)
 			if err != nil {

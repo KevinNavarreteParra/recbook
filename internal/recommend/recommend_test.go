@@ -3,10 +3,12 @@ package recommend
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/KevinNavarreteParra/recbook/internal/contract"
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
@@ -17,7 +19,9 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
-func setup(t *testing.T) (*store.Store, func(name string) int64) {
+// setup loads the demo, with blurbs and subjects, plus any extra catalog
+// titles, and builds everything recommendations need.
+func setup(t *testing.T, extra ...contract.CatalogTitle) (*store.Store, func(name string) int64) {
 	t.Helper()
 	ctx := context.Background()
 	st, err := store.Open(ctx, "")
@@ -44,6 +48,10 @@ func setup(t *testing.T) (*store.Store, func(name string) int64) {
 		titles[i].Description = demo.Blurbs[titles[i].ID]
 		titles[i].Subjects = demo.Subjects[titles[i].ID]
 	}
+	for _, e := range extra {
+		titles = append(titles, e)
+		avail = append(avail, contract.Availability{TitleID: e.ID, Available: true, CopiesOwned: 1, CopiesAvailable: 1})
+	}
 	if err := st.SaveCatalog(ctx, demo.Library, titles, avail, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +60,8 @@ func setup(t *testing.T) (*store.Store, func(name string) int64) {
 	}
 	for _, step := range []func(context.Context, *store.Store) error{
 		func(ctx context.Context, st *store.Store) error { return signals.Run(ctx, st, signals.Options{}) },
-		library.Build, BuildGenre, search.Build,
+		func(ctx context.Context, st *store.Store) error { return library.Build(ctx, st, nil) },
+		BuildGenre, search.Build,
 	} {
 		if err := step(ctx, st); err != nil {
 			t.Fatal(err)
@@ -64,7 +73,7 @@ func setup(t *testing.T) (*store.Store, func(name string) int64) {
 
 	find := func(name string) int64 {
 		t.Helper()
-		works, err := search.Find(ctx, st, name)
+		works, err := search.Find(ctx, st, name, nil)
 		if err != nil || len(works) == 0 {
 			t.Fatalf("Find(%q) = %v, %v", name, works, err)
 		}
@@ -126,6 +135,47 @@ func TestSimilar(t *testing.T) {
 	recs, _, _ = Similar(ctx, st, Options{Seeds: []int64{tinker, redOctober}, MaxWaitDays: -1, Limit: 3})
 	if got := titles(recs); !strings.Contains(strings.Join(got, "|"), "Red Storm Rising") {
 		t.Errorf("a navy seed should bring in Red Storm Rising: %q", got)
+	}
+}
+
+func TestLanguages(t *testing.T) {
+	ctx := context.Background()
+	// A le Carré the library has only in Spanish, described and shelved
+	// like Tinker Tailor, and a Clancy, without which Espionage would be
+	// on more than a quarter of this small catalog's works, and the genre
+	// view would ignore it.
+	st, find := setup(t, contract.CatalogTitle{
+		ID: "9050", Title: "El topo", Format: contract.Audiobook, Language: "es", DurationMin: 600,
+		Creators:    []contract.Creator{{Name: "John le Carré", Role: contract.Author}},
+		Description: "Smiley busca al topo del Circus entre sus viejos agentes de Berlin.",
+		Subjects:    demo.Subjects["9013"],
+	}, contract.CatalogTitle{
+		ID: "9051", Title: "Tormenta roja", Format: contract.Audiobook, Language: "es", DurationMin: 600,
+		Creators: []contract.Creator{{Name: "Tom Clancy", Role: contract.Author}},
+		Subjects: demo.Subjects["9017"],
+	})
+	tinker := find("tinker tailor")
+
+	for _, view := range []string{"content", "genre"} {
+		blend, _ := ParseView(view)
+		recs, seeds, err := Similar(ctx, st, Options{Seeds: []int64{tinker}, Views: blend, MaxWaitDays: -1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(titles(recs), "El topo") {
+			t.Errorf("%s view, any language: El topo should be recommended: %q", view, titles(recs))
+		}
+		if view == "content" && (seeds[0].TextSource != "catalog" || seeds[0].TextLanguage != "en") {
+			t.Errorf("Tinker Tailor is described by the catalog, in English: %+v", seeds[0])
+		}
+
+		recs, _, err = Similar(ctx, st, Options{Seeds: []int64{tinker}, Views: blend, MaxWaitDays: -1, Languages: []string{"en"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(titles(recs), "El topo") || len(recs) == 0 {
+			t.Errorf("%s view, in English: El topo should be left out: %q", view, titles(recs))
+		}
 	}
 }
 

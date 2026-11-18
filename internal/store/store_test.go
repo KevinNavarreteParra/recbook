@@ -195,13 +195,22 @@ func TestSaveSeenAndSaveAvailability(t *testing.T) {
 
 func TestRunScript(t *testing.T) {
 	s := openTest(t)
-	script := `CREATE OR REPLACE TABLE t AS SELECT getvariable('n') AS n, getvariable('label') AS label;
-	           INSERT INTO t VALUES (2, 'two');`
-	if err := s.RunScript(context.Background(), script, Vars{"n": 1, "label": "it's one"}); err != nil {
+	script := `CREATE OR REPLACE TABLE t AS
+	               SELECT getvariable('n') AS n, getvariable('label') AS label, getvariable('codes') AS codes;
+	           INSERT INTO t VALUES (2, 'two', []);`
+	vars := Vars{"n": 1, "label": "it's one", "codes": []string{"en", "o'k"}}
+	if err := s.RunScript(context.Background(), script, vars); err != nil {
 		t.Fatal(err)
 	}
-	if got := count(t, s, `SELECT count(*) FROM t WHERE (n = 1 AND label = 'it''s one') OR n = 2`); got != 2 {
+	q := `SELECT count(*) FROM t WHERE (n = 1 AND label = 'it''s one' AND codes = ['en', 'o''k']) OR n = 2`
+	if got := count(t, s, q); got != 2 {
 		t.Errorf("script should set variables and run every statement; rows = %d", got)
+	}
+
+	// An empty list is still a list of strings.
+	if err := s.RunScript(context.Background(), `CREATE TABLE e AS SELECT len(getvariable('none')) AS n`,
+		Vars{"none": []string{}}); err != nil {
+		t.Fatal(err)
 	}
 }
 

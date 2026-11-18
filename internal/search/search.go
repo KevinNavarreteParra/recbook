@@ -44,6 +44,10 @@ type Query struct {
 	MaxMinutes   int  // running time at most this long; 0 for no limit
 	IncludeRead  bool // also show books I've finished
 	Limit        int  // at most this many; 0 means 20
+
+	// Languages keeps only recordings in these languages (ISO 639-1
+	// codes, "en"); nil keeps every language.
+	Languages []string
 }
 
 // Result is one work found, in the recording the library would lend.
@@ -76,6 +80,7 @@ func Search(ctx context.Context, st *store.Store, q Query) ([]Result, error) {
 		sql.Named("max_wait", q.MaxWaitDays),
 		sql.Named("min_minutes", q.MinMinutes),
 		sql.Named("max_minutes", q.MaxMinutes),
+		sql.Named("languages", list(q.Languages)),
 		sql.Named("limit", q.Limit))
 	if err != nil {
 		return nil, err
@@ -106,9 +111,10 @@ type Work struct {
 }
 
 // Find returns up to five works whose title and author contain every word
-// of name, those on my shelf first.
-func Find(ctx context.Context, st *store.Store, name string) ([]Work, error) {
-	rows, err := st.DB().QueryContext(ctx, findSQL, sql.Named("q", name))
+// of name: those on my shelf first, then those the library offers in one
+// of languages (nil for any) or doesn't have at all.
+func Find(ctx context.Context, st *store.Store, name string, languages []string) ([]Work, error) {
+	rows, err := st.DB().QueryContext(ctx, findSQL, sql.Named("q", name), sql.Named("languages", list(languages)))
 	if err != nil {
 		return nil, err
 	}
@@ -122,4 +128,13 @@ func Find(ctx context.Context, st *store.Store, name string) ([]Work, error) {
 		out = append(out, w)
 	}
 	return out, rows.Err()
+}
+
+// list is a non-nil copy of codes, since a nil slice reaches DuckDB as
+// NULL rather than as an empty list.
+func list(codes []string) []string {
+	if codes == nil {
+		return []string{}
+	}
+	return codes
 }

@@ -48,22 +48,25 @@ var templateFuncs = template.FuncMap{
 
 // Server serves the app.
 type Server struct {
-	snapshot string // path of the published database copy
-	tracker  *Tracker
-	tmpl     map[string]*template.Template // by page name
+	snapshot  string   // path of the published database copy
+	languages []string // search, recommendations and author pages keep recordings in these; nil for any
+	tracker   *Tracker
+	tmpl      map[string]*template.Template // by page name
 
 	mu    sync.RWMutex // guards st and stamp; requests hold it for reading
 	st    *store.Store
 	stamp time.Time // modification time of the copy st has open
 }
 
-// New opens the published copy and the tracker file.
-func New(ctx context.Context, snapshot, trackerPath string) (*Server, error) {
+// New opens the published copy and the tracker file. Search,
+// recommendations and author pages show only recordings in languages (ISO
+// 639-1 codes, "en"), or in any language if it's nil.
+func New(ctx context.Context, snapshot, trackerPath string, languages []string) (*Server, error) {
 	tracker, err := OpenTracker(trackerPath)
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{snapshot: snapshot, tracker: tracker, tmpl: map[string]*template.Template{}}
+	s := &Server{snapshot: snapshot, languages: languages, tracker: tracker, tmpl: map[string]*template.Template{}}
 
 	base := template.Must(template.New("").Funcs(templateFuncs).
 		ParseFS(templateFiles, "templates/layout.html", "templates/partials.html"))

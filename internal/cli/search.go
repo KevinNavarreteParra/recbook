@@ -17,13 +17,15 @@ func newSearchCmd(g *globals) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search <words...>",
 		Short: "Search the library's audiobooks by title, author, narrator, series, subject or blurb",
-		Long: "Keyword search over every audiobook the library has. Any word may match,\n" +
-			"and word forms and accents don't matter. Books I've finished are hidden\n" +
-			"unless --include-read. Run `recbook build` first.",
+		Long: "Keyword search over every audiobook the library has in the --lang\n" +
+			"languages. Any word may match, and word forms and accents don't matter.\n" +
+			"Books I've finished are hidden unless --include-read. Run `recbook build`\n" +
+			"first.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			q.Text = strings.Join(args, " ")
 			q.MinMinutes, q.MaxMinutes = int(minHours*60), int(maxHours*60)
+			q.Languages = g.languages()
 			st, err := g.openStore(cmd.Context())
 			if err != nil {
 				return err

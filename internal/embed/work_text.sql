@@ -3,8 +3,9 @@
 -- text_hash to get a work's vector.
 CREATE OR REPLACE TABLE work_text (
     work_id   BIGINT  NOT NULL,
-    side      VARCHAR NOT NULL,  -- where the description came from: catalog or shelf
-    text      VARCHAR NOT NULL,  -- title, then the cleaned blurb
+    source    VARCHAR NOT NULL,  -- where the description came from: catalog, or a shelf source
+    language  VARCHAR,           -- its language, if the source records one: "en"
+    text      VARCHAR NOT NULL,  -- the record's title, then its cleaned blurb
     text_hash VARCHAR NOT NULL,
     thin      BOOLEAN NOT NULL   -- the blurb was too short to say much
 );

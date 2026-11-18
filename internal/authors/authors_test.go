@@ -39,9 +39,9 @@ var extra = []struct {
 		[]contract.Creator{{Name: "Professional Book Nerds", Role: contract.Narrator}}},
 }
 
-// setup loads the demo shelves and catalog plus extra, runs the build
-// steps authors needs, and embeds with demo.ThemeEmbedder.
-func setup(t *testing.T) *store.Store {
+// setup loads the demo shelves and catalog plus extra and more, runs the
+// build steps authors needs, and embeds with demo.ThemeEmbedder.
+func setup(t *testing.T, more ...contract.CatalogTitle) *store.Store {
 	t.Helper()
 	ctx := context.Background()
 	st, err := store.Open(ctx, "")
@@ -64,6 +64,10 @@ func setup(t *testing.T) *store.Store {
 		})
 		avail = append(avail, contract.Availability{TitleID: e.id, Available: true, CopiesOwned: 1, CopiesAvailable: 1})
 	}
+	for _, m := range more {
+		titles = append(titles, m)
+		avail = append(avail, contract.Availability{TitleID: m.ID, Available: true, CopiesOwned: 1, CopiesAvailable: 1})
+	}
 	if err := st.SaveCatalog(ctx, demo.Library, titles, avail, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +78,7 @@ func setup(t *testing.T) *store.Store {
 	if err := signals.Run(ctx, st, signals.Options{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := library.Build(ctx, st); err != nil {
+	if err := library.Build(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := embed.Run(ctx, st, demo.ThemeEmbedder{}, embed.Options{}); err != nil {
@@ -258,5 +262,57 @@ func TestLookupSetsAsideOtherSpellings(t *testing.T) {
 		if n.ID == "fyodor dostoyevsky" {
 			t.Error("another spelling of him isn't a similar author")
 		}
+	}
+}
+
+func TestLookupLanguages(t *testing.T) {
+	ctx := context.Background()
+	spanish := func(id, title, author, blurb string) contract.CatalogTitle {
+		return contract.CatalogTitle{
+			ID: id, Title: title, Description: blurb, Format: contract.Audiobook, Language: "es", DurationMin: 600,
+			Creators: []contract.Creator{{Name: author, Role: contract.Author}},
+		}
+	}
+	st := setup(t,
+		// Furst again, in Spanish, and a spy writer the library has only in Spanish.
+		spanish("9950", "Los agentes de Berlín", "Alan Furst", "Los agentes del Circus cruzan Berlin."),
+		spanish("9951", "El espía del Circus", "Arturo Pérez-Reverte", "Un spy del Circus y sus agentes en Berlin."))
+	lookup := func(id string, languages []string) *Result {
+		t.Helper()
+		res, err := Lookup(ctx, st, id, Options{MaxWaitDays: -1, MinWorks: 1, Languages: languages})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	books := func(res *Result, author string) []string {
+		for _, n := range res.Similar {
+			if n.ID == author {
+				return titles(n.Books)
+			}
+		}
+		return nil
+	}
+
+	// More by Furst, in any language and in English.
+	if got := titles(lookup("alan furst", nil).More); !slices.Contains(got, "Los agentes de Berlín") {
+		t.Errorf("more by Furst, any language = %q", got)
+	}
+	if got := titles(lookup("alan furst", []string{"en"}).More); !slices.Equal(got, []string{"The Polish Officer"}) {
+		t.Errorf("more by Furst, in English = %q", got)
+	}
+
+	// Authors like le Carré: in English, Furst keeps only his English book,
+	// and Pérez-Reverte, with nothing in English, drops out.
+	res := lookup("john le carre", nil)
+	if !slices.Contains(books(res, "alan furst"), "Los agentes de Berlín") || books(res, "arturo perez reverte") == nil {
+		t.Errorf("authors like le Carré, any language = %+v", res.Similar)
+	}
+	res = lookup("john le carre", []string{"en"})
+	if got := books(res, "alan furst"); !slices.Equal(got, []string{"The Polish Officer"}) {
+		t.Errorf("Furst's books like le Carré, in English = %q", got)
+	}
+	if got := books(res, "arturo perez reverte"); got != nil {
+		t.Errorf("Pérez-Reverte has nothing in English, but shows %q", got)
 	}
 }

@@ -118,6 +118,10 @@ type Options struct {
 	PerAuthor    int     // at most this many results by one author; 0 for no cap
 	Diversity    float64 // 0..1: how much closeness to trade for variety (see Diversify)
 	Limit        int     // at most this many results; 0 means 20
+
+	// Languages keeps only recordings in these languages (ISO 639-1
+	// codes, "en"); nil keeps every language.
+	Languages []string
 }
 
 func (o Options) blend() Blend {
@@ -136,7 +140,15 @@ type Seed struct {
 	Embedded bool // it has a description to compare in the content view
 	Shelved  bool // it has subjects to compare in the genre view
 	Skipped  bool // it has neither in the views asked for, so it was left out
-	vector   []float32
+
+	// TextSource is where the description behind its content vector came
+	// from ("catalog", or a shelf source such as "readinglist"), and
+	// TextLanguage the description's language, if the source records one.
+	// A seed described in another language than mine finds books in that
+	// language, so this says why.
+	TextSource, TextLanguage string
+
+	vector []float32
 }
 
 // Has reports whether s can be compared in view v.
@@ -260,7 +272,7 @@ func LoadSeeds(ctx context.Context, st *store.Store, model string, ids []int64) 
 		s := Seed{WorkID: id}
 		var vector any
 		err := st.DB().QueryRowContext(ctx, seedSQL, sql.Named("model", model), sql.Named("work_id", id)).
-			Scan(&s.Title, &s.Author, &s.Weight, &vector, &s.Shelved)
+			Scan(&s.Title, &s.Author, &s.Weight, &vector, &s.TextSource, &s.TextLanguage, &s.Shelved)
 		if err != nil {
 			return nil, fmt.Errorf("seed %d: %w (has `recbook build` run since the last embed?)", id, err)
 		}
@@ -433,8 +445,12 @@ func Fuse(pos, avoid []Ranking, opts Options) []Rec {
 // the seed's vector with every embedded work's, the genre view the seed's
 // subjects with every shelved work's.
 func neighbours(ctx context.Context, db *sql.DB, v View, s Seed, exclude []int64, opts Options, depth int) ([]Rec, error) {
+	languages := opts.Languages
 	if exclude == nil {
 		exclude = []int64{} // a NULL list would exclude everything
+	}
+	if languages == nil {
+		languages = []string{} // ...and a NULL list of languages would keep nothing
 	}
 	query, args := contentSQL, []any{sql.Named("seed", s.vector), sql.Named("model", opts.Model)}
 	if v == Genre {
@@ -445,6 +461,7 @@ func neighbours(ctx context.Context, db *sql.DB, v View, s Seed, exclude []int64
 		sql.Named("include_read", opts.IncludeRead),
 		sql.Named("available_now", opts.AvailableNow),
 		sql.Named("max_wait", opts.MaxWaitDays),
+		sql.Named("languages", languages),
 		sql.Named("k", depth))...)
 	if err != nil {
 		return nil, err

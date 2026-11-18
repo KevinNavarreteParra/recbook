@@ -109,7 +109,7 @@ func TestRunEmbedsOnceAndResumes(t *testing.T) {
 	if stale() == 0 {
 		t.Fatal("test setup: the new record should have shifted the work ids")
 	}
-	if _, err := WriteTexts(ctx, st); err != nil {
+	if _, err := WriteTexts(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n := stale(); n != 0 {
@@ -141,5 +141,64 @@ func TestRunStopsOnCancel(t *testing.T) {
 	rep, err := Run(ctx, demoWithBlurbs(t), &fakeEmbedder{}, Options{})
 	if err != nil || rep.Embedded != 0 || !errors.Is(rep.Stopped, context.Canceled) {
 		t.Errorf("a cancelled run should stop cleanly: %+v, %v", rep, err)
+	}
+}
+
+func TestWriteTextsPrefersMyLanguages(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := demo.Load(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	// The library has Project Hail Mary only in Spanish, described in
+	// Spanish; my reading app describes it in English. The loan of the
+	// Spanish recording joins the two.
+	titles, avail := demo.Catalog()
+	for i := range titles {
+		if titles[i].ID == "9005" {
+			titles[i].Title, titles[i].Language = "Proyecto Hail Mary", "es"
+			titles[i].Description = "Ryland Grace es el único superviviente de una misión desesperada."
+		}
+	}
+	if err := st.SaveCatalog(ctx, demo.Library, titles, avail, contract.NewDay(2026, 11, 1).Time()); err != nil {
+		t.Fatal(err)
+	}
+	shelf := &contract.Shelf{Items: []contract.ShelfItem{{
+		ID: "rl-1", Title: "Project Hail Mary", Authors: []string{"Andy Weir"}, Format: contract.Print, Language: "en",
+		Description: "Ryland Grace is the sole survivor on a desperate, last-chance mission.",
+	}}}
+	if err := st.ReplaceShelf(ctx, "reading", "test", shelf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolve.Run(ctx, st, resolve.Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		languages                []string
+		source, language, prefix string
+	}{
+		{[]string{"en"}, "reading", "en", "Project Hail Mary. Ryland Grace is"},
+		{nil, "catalog", "es", "Proyecto Hail Mary. Ryland Grace es"}, // any language: the catalog's blurb
+		{[]string{"es", "en"}, "catalog", "es", "Proyecto Hail Mary. Ryland Grace es"},
+	}
+	for _, tt := range tests {
+		if _, err := WriteTexts(ctx, st, tt.languages); err != nil {
+			t.Fatal(err)
+		}
+		var source, language, text string
+		err := st.DB().QueryRow(`SELECT source, language, text FROM work_text
+			WHERE work_id = (SELECT work_id FROM work_record WHERE ref = 'catalog:demo:9005')`).Scan(&source, &language, &text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if source != tt.source || language != tt.language || !strings.HasPrefix(text, tt.prefix) {
+			t.Errorf("languages %v: %s (%s) %q, want %s (%s) %q...", tt.languages, source, language, text,
+				tt.source, tt.language, tt.prefix)
+		}
 	}
 }

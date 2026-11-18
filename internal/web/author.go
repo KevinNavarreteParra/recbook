@@ -45,6 +45,7 @@ func (s *Server) authorPage(w http.ResponseWriter, r *http.Request) {
 
 	res, err := authors.Lookup(r.Context(), st, found[0].ID, authors.Options{
 		AvailableNow: f.AvailableNow, MaxWaitDays: f.maxWaitDays(), IncludeRead: f.IncludeRead,
+		Languages: s.languages,
 	})
 	if err != nil {
 		s.fail(w, err)

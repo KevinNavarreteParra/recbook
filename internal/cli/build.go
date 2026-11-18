@@ -30,7 +30,8 @@ func newBuildCmd(g *globals) *cobra.Command {
 		Long: "Rebuild every derived table from the contract tables: match records into\n" +
 			"works, derive dates, labels and tiers, pick the recording to offer for each\n" +
 			"work, weigh each work's subjects for the genre view, and index everything\n" +
-			"for search. Safe to rerun; it never changes ingested data.\n\n" +
+			"for search. Recordings and descriptions in the --lang languages are\n" +
+			"chosen first. Safe to rerun; it never changes ingested data.\n\n" +
 			"Reads <data dir>/match_overrides.csv if present and writes the matches\n" +
 			"worth checking to <data dir>/review/matches.csv, where <data dir> is the\n" +
 			"folder holding the database.",
@@ -66,7 +67,7 @@ func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) erro
 	if err := signals.Run(ctx, st, signals.Options{}); err != nil {
 		return err
 	}
-	if err := library.Build(ctx, st); err != nil {
+	if err := library.Build(ctx, st, g.languages()); err != nil {
 		return err
 	}
 	if err := recommend.BuildGenre(ctx, st); err != nil {
@@ -76,7 +77,7 @@ func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) erro
 		return err
 	}
 	// Works were renumbered, so the embedded texts must follow them.
-	if _, err := embed.WriteTexts(ctx, st); err != nil {
+	if _, err := embed.WriteTexts(ctx, st, g.languages()); err != nil {
 		return err
 	}
 	if err := authors.Build(ctx, st); err != nil {

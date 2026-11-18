@@ -114,7 +114,7 @@ func (s *Server) searchPage(w http.ResponseWriter, r *http.Request) {
 		min, max := f.minutes()
 		results, err := search.Search(r.Context(), st, search.Query{
 			Text: q, AvailableNow: f.AvailableNow, MaxWaitDays: f.maxWaitDays(),
-			MinMinutes: min, MaxMinutes: max, IncludeRead: f.IncludeRead, Limit: 30,
+			MinMinutes: min, MaxMinutes: max, IncludeRead: f.IncludeRead, Limit: 30, Languages: s.languages,
 		})
 		if err != nil {
 			s.fail(w, err)
@@ -141,6 +141,7 @@ func (s *Server) recommendPage(w http.ResponseWriter, r *http.Request) {
 		recs, seeds, err := recommend.Similar(r.Context(), st, recommend.Options{
 			Seeds: ids, AvailableNow: f.AvailableNow, MaxWaitDays: f.maxWaitDays(),
 			IncludeRead: f.IncludeRead, PerAuthor: 3, Diversity: recommend.DefaultDiversity, Limit: 30,
+			Languages: s.languages,
 		})
 		if err != nil {
 			s.fail(w, err)
@@ -170,7 +171,7 @@ func (s *Server) seedOptions(w http.ResponseWriter, r *http.Request) {
 	var works []search.Work
 	if q != "" {
 		var err error
-		if works, err = search.Find(r.Context(), st, q); err != nil {
+		if works, err = search.Find(r.Context(), st, q, s.languages); err != nil {
 			s.fail(w, err)
 			return
 		}

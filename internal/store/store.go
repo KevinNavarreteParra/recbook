@@ -181,14 +181,21 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// sqlLiteral renders a script variable as SQL. Only numbers, booleans and
-// strings are allowed, which is all scripts need.
+// sqlLiteral renders a script variable as SQL. Only numbers, booleans,
+// strings and lists of strings are allowed, which is all scripts need.
 func sqlLiteral(v any) (string, error) {
 	switch v := v.(type) {
 	case int, int64, float64, bool:
 		return fmt.Sprint(v), nil
 	case string:
 		return "'" + strings.ReplaceAll(v, "'", "''") + "'", nil
+	case []string:
+		items := make([]string, len(v))
+		for i, s := range v {
+			items[i], _ = sqlLiteral(s)
+		}
+		// Typed, so that an empty list is still a list of strings.
+		return "[" + strings.Join(items, ", ") + "]::VARCHAR[]", nil
 	default:
 		return "", fmt.Errorf("unsupported type %T", v)
 	}
