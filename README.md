@@ -61,7 +61,10 @@ A finished book with no description can't be a seed. `enrich` looks those
 up in Google Books, then Open Library, and saves what it finds as the shelf
 `enrich`; every answer is cached, so each book is asked about once. Google
 Books usually refuses requests without an API key, which can be given in
-`RECBOOK_GOOGLE_BOOKS_KEY`.
+`RECBOOK_GOOGLE_BOOKS_KEY`. Keep it as a `pass://` reference in `.env`
+(see `.env.example`) and run through `prun`. The nightly unit does that
+through `deploy/prun-or-run`, which runs the job keyless if `.env` is
+missing or won't resolve.
 
 Results are in the languages I listen in: English, unless `--lang` (or
 `RECBOOK_LANGUAGES`) says `en,es`, say, or `any`. `build` offers each book

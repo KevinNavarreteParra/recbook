@@ -7,9 +7,14 @@ Description=recbook nightly upkeep: catalog, rebuild, embeddings (02:00-06:00 on
 [Service]
 Type=oneshot
 WorkingDirectory=%h/utilities/recbook
+# prun-or-run resolves the pass:// references in the repo's .env (the
+# Google Books key; see .env.example) through prun at launch, and runs the
+# job without them if it can't. prun calls pass-session and pass-cli by
+# name, and systemd's PATH lacks ~/.local/bin.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
 # The job refuses to run outside --window and stops itself when it closes.
 # It starts its own Ollama server and stops it at the end.
-ExecStart=%h/utilities/recbook/bin/recbook nightly --window 02:00-06:00 --library lasvegas --ollama %h/.local/bin/ollama
+ExecStart=%h/utilities/recbook/deploy/prun-or-run %h/utilities/recbook/bin/recbook nightly --window 02:00-06:00 --library lasvegas --ollama %h/.local/bin/ollama
 # Backstop, in case the job overran its own deadline: stop it 15 minutes
 # after the window. Stopping sends SIGTERM to the job and the Ollama server
 # it started; the job saves its current batch and exits.

@@ -1,0 +1,17 @@
+#!/bin/sh
+# prun-or-run CMD [ARGS...]: run a command with the pass:// references in
+# ./.env resolved by prun, when it can, and without them when it can't.
+#
+# The nightly job's only secret is the Google Books key (see .env.example),
+# and enrich manages without it, falling back to Open Library. So when
+# there's no .env, or Proton Pass can't be signed in to, or a reference
+# doesn't resolve, the job should still run, keyless, rather than not run
+# at all. A trial resolution (prun true) decides which; the command itself
+# runs once either way.
+if [ -f .env ] && prun true >/dev/null 2>&1; then
+	exec prun "$@"
+fi
+if [ -f .env ]; then
+	echo "prun-or-run: couldn't resolve .env; running without it" >&2
+fi
+exec "$@"
