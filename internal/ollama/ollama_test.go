@@ -6,6 +6,8 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -80,5 +82,35 @@ func TestServeUsesARunningServer(t *testing.T) {
 	s.Stop() // must not touch a server it didn't start
 	if !c.Ready(context.Background()) {
 		t.Error("Stop shut down a server Serve didn't start")
+	}
+}
+
+func TestServeCPURefusesARunningServer(t *testing.T) {
+	c := fakeServer(t)
+	host := strings.TrimPrefix(c.BaseURL, "http://")
+	if _, err := ServeCPU(context.Background(), "/nonexistent/ollama", host); err == nil {
+		t.Error("ServeCPU should refuse a server it didn't start: it may be on the GPU")
+	}
+}
+
+func TestWithoutGPUHidesTheGPU(t *testing.T) {
+	if _, err := exec.LookPath("bwrap"); err != nil {
+		t.Skip("no bubblewrap here")
+	}
+	out, err := withoutGPU("sh", "-c", "ls /dev; nice").Output()
+	if err != nil {
+		t.Skipf("bubblewrap can't make a sandbox here (no user namespaces?): %v", err)
+	}
+	lines := strings.Fields(string(out))
+	for _, name := range lines {
+		if strings.HasPrefix(name, "nvidia") || name == "dri" || name == "kfd" {
+			t.Errorf("the sandbox's /dev has %s: %q", name, lines)
+		}
+	}
+	if !slices.Contains(lines, "null") {
+		t.Errorf("the sandbox's /dev should still have the basics: %q", lines)
+	}
+	if niceness := lines[len(lines)-1]; niceness != "19" {
+		t.Errorf("niceness %s, want 19", niceness)
 	}
 }

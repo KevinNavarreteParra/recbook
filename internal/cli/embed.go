@@ -22,12 +22,17 @@ func newEmbedCmd(g *globals) *cobra.Command {
 	var opts embedOptions
 	cmd := &cobra.Command{
 		Use:   "embed",
-		Short: "Embed work descriptions on the GPU, skipping any already done",
+		Short: "Embed work descriptions on the GPU (or --cpu), skipping any already done",
 		Long: "Embed each work's title and cleaned blurb with a local model through\n" +
 			"Ollama, for the content view. Vectors are cached, so a run only does what\n" +
 			"earlier runs didn't. It refuses to start while the GPU is busy, stops if\n" +
 			"something else starts using it, and starts and stops its own Ollama\n" +
-			"server unless one is already running. Run `recbook build` first.",
+			"server unless one is already running. Run `recbook build` first.\n\n" +
+			"--cpu embeds by day instead, at the lowest priority, with a server of its\n" +
+			"own (on " + ollama.CPUHost + ") that can't see the GPU: it runs in a\n" +
+			"bubblewrap sandbox without the GPU's device files. It's slower (about\n" +
+			"three texts a second here), so it suits the few texts a daytime build\n" +
+			"leaves.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			st, err := g.openStore(cmd.Context())
@@ -42,6 +47,7 @@ func newEmbedCmd(g *globals) *cobra.Command {
 		},
 	}
 	addEmbedFlags(cmd, &opts)
+	cmd.Flags().BoolVar(&opts.cpu, "cpu", false, "embed on the CPU, with the GPU hidden from Ollama, so it's safe by day")
 	return cmd
 }
 
@@ -49,6 +55,7 @@ type embedOptions struct {
 	model, prefix string
 	ollamaBinary  string
 	limit         int
+	cpu           bool // on the CPU, with the GPU hidden (ollama.ServeCPU)
 }
 
 func addEmbedFlags(cmd *cobra.Command, opts *embedOptions) {
@@ -60,18 +67,34 @@ func addEmbedFlags(cmd *cobra.Command, opts *embedOptions) {
 
 // embedWorks runs the embedding step with the GPU guard: claim the GPU,
 // bring up Ollama, make sure the model is there, embed, shut Ollama down.
-// A busy GPU or a closing window ends it early without an error. Texts are
+// A busy GPU or a closing window ends it early without an error. On the
+// CPU (opts.cpu) there is no GPU to guard, so a game can have it. Texts are
 // chosen as build chooses them, preferring languages.
 func embedWorks(ctx context.Context, st *store.Store, languages []string, opts embedOptions, out io.Writer) (embed.Report, error) {
-	guard, err := nightly.Claim(ctx)
-	if err != nil {
-		fmt.Fprintln(out, "embed:", err)
-		return embed.Report{Stopped: err}, nil
-	}
-
-	server, err := ollama.Serve(ctx, opts.ollamaBinary, ollama.DefaultHost)
-	if err != nil {
-		return embed.Report{}, err
+	var server *ollama.Server
+	var between func(context.Context) error // runs before each batch
+	if opts.cpu {
+		fmt.Fprintf(out, "embed: on the CPU, with the GPU hidden (%s)\n", ollama.CPUHost)
+		var err error
+		if server, err = ollama.ServeCPU(ctx, opts.ollamaBinary, ollama.CPUHost); err != nil {
+			return embed.Report{}, err
+		}
+	} else {
+		guard, err := nightly.Claim(ctx)
+		if err != nil {
+			fmt.Fprintln(out, "embed:", err)
+			return embed.Report{Stopped: err}, nil
+		}
+		if server, err = ollama.Serve(ctx, opts.ollamaBinary, ollama.DefaultHost); err != nil {
+			return embed.Report{}, err
+		}
+		between = func(ctx context.Context) error {
+			vram, err := server.VRAMBytes(ctx)
+			if err != nil {
+				return err
+			}
+			return guard.Check(ctx, int(vram>>20))
+		}
 	}
 	defer server.Stop()
 
@@ -103,13 +126,7 @@ func embedWorks(ctx context.Context, st *store.Store, languages []string, opts e
 
 	rep, err := embed.Run(ctx, st, server, embed.Options{
 		Model: model, Prefix: opts.prefix, Limit: opts.limit, Progress: progress, Languages: languages,
-		Between: func(ctx context.Context) error {
-			vram, err := server.VRAMBytes(ctx)
-			if err != nil {
-				return err
-			}
-			return guard.Check(ctx, int(vram>>20))
-		},
+		Between: between,
 	})
 	if err != nil {
 		return rep, err

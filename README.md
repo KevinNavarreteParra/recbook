@@ -117,6 +117,11 @@ is busy and backs off if a game starts. Ollama runs only for the length of
 the job, and whatever a night doesn't finish, the next night continues.
 Logs: `journalctl --user -u recbook-nightly`.
 
+By day, `recbook embed --cpu` embeds what a build left new, on the CPU at
+the lowest priority. Ollama ignores `CUDA_VISIBLE_DEVICES`, so its server
+runs in a bubblewrap sandbox with no GPU device files to open, on port
+11435 rather than the usual 11434.
+
 ## Adding a source
 
 Add a package under `internal/sources/` whose reader turns the export into
