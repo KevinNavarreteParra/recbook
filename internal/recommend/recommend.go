@@ -28,6 +28,7 @@ import (
 
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
+	"github.com/KevinNavarreteParra/recbook/internal/textkey"
 )
 
 var (
@@ -430,7 +431,7 @@ func Fuse(pos, avoid []Ranking, opts Options) []Rec {
 		if len(out) == opts.Limit {
 			break
 		}
-		author := strings.ToLower(c.Author)
+		author := authorKey(c.Author)
 		if opts.PerAuthor > 0 && byAuthor[author] >= opts.PerAuthor {
 			continue
 		}
@@ -439,6 +440,16 @@ func Fuse(pos, avoid []Ranking, opts Options) []Rec {
 		out = append(out, c.Rec)
 	}
 	return out
+}
+
+// authorKey is who counts as one author for the per-author cap: the person
+// a credit names (textkey.Person), so that "John le Carré" and "John Le
+// Carre" share one cap, or else the credit itself, lowercased.
+func authorKey(credit string) string {
+	if key := textkey.Person(credit); key != "" {
+		return key
+	}
+	return strings.ToLower(credit)
 }
 
 // neighbours runs one seed's ranking in view v: the content view compares

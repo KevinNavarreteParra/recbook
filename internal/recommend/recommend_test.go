@@ -262,3 +262,20 @@ func TestWeigh(t *testing.T) {
 		t.Errorf("content alone, unweighted: %+v", got)
 	}
 }
+
+func TestFuseCapsAuthorsNotSpellings(t *testing.T) {
+	// One ranking, best first: le Carré under three spellings, then Furst.
+	near := []Rec{
+		{WorkID: 1, Title: "Smiley's People", Author: "John le Carré"},
+		{WorkID: 2, Title: "The Honourable Schoolboy", Author: "John Le Carre"},
+		{WorkID: 3, Title: "The Looking Glass War", Author: "le Carré, John"},
+		{WorkID: 4, Title: "The Polish Officer", Author: "Alan Furst"},
+	}
+	pos := []Ranking{{Seed: Seed{Title: "Tinker Tailor Soldier Spy"}, View: Content, Weight: 1, Near: near}}
+
+	got := titles(Fuse(pos, nil, Options{PerAuthor: 2}))
+	want := []string{"Smiley's People", "The Honourable Schoolboy", "The Polish Officer"}
+	if !slices.Equal(got, want) {
+		t.Errorf("PerAuthor 2 = %q, want %q: three spellings are one author", got, want)
+	}
+}
