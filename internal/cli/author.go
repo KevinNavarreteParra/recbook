@@ -1,18 +1,52 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/KevinNavarreteParra/recbook/internal/authors"
+	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
+// authorQuery is what an `author` command line asks for; like
+// similarQuery, the query suite runs saved ones too.
+type authorQuery struct {
+	opts authors.Options
+}
+
+func (q *authorQuery) flags(fs *pflag.FlagSet) {
+	fs.BoolVar(&q.opts.AvailableNow, "available-now", false, "only titles borrowable right now")
+	fs.IntVar(&q.opts.MaxWaitDays, "max-wait", -1, "only titles available within this many days")
+	fs.BoolVar(&q.opts.IncludeRead, "include-read", false, "also show books I've finished")
+	fs.IntVar(&q.opts.Authors, "authors", 10, "how many similar authors")
+	fs.IntVar(&q.opts.PerAuthor, "books", 3, "books shown for each similar author")
+	fs.IntVar(&q.opts.MinWorks, "min-works", authors.DefaultMinWorks, "embedded books a similar author needs")
+	fs.IntVar(&q.opts.Limit, "limit", 50, "show at most this many of the author's own books")
+}
+
+// run finds the author by name and looks them up. It also returns the
+// other authors the name matched.
+func (q *authorQuery) run(ctx context.Context, st *store.Store, name string, languages []string) (*authors.Result, []authors.Author, error) {
+	found, err := authors.Find(ctx, st, name)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(found) == 0 {
+		return nil, nil, fmt.Errorf("no author matches %q; try their surname alone", name)
+	}
+	q.opts.Languages = languages
+	res, err := authors.Lookup(ctx, st, found[0].ID, q.opts)
+	return res, found[1:], err
+}
+
 func newAuthorCmd(g *globals) *cobra.Command {
-	var opts authors.Options
+	var q authorQuery
 	cmd := &cobra.Command{
 		Use:   "author <name>",
 		Short: "More by an author, and the authors most like them",
@@ -33,31 +67,15 @@ func newAuthorCmd(g *globals) *cobra.Command {
 			}
 			defer st.Close()
 
-			name := strings.Join(args, " ")
-			found, err := authors.Find(ctx, st, name)
+			res, others, err := q.run(ctx, st, strings.Join(args, " "), g.languages())
 			if err != nil {
 				return err
 			}
-			if len(found) == 0 {
-				return fmt.Errorf("no author matches %q; try their surname alone", name)
-			}
-			opts.Languages = g.languages()
-			res, err := authors.Lookup(ctx, st, found[0].ID, opts)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			printAuthor(out, res, found[1:])
+			printAuthor(cmd.OutOrStdout(), res, others)
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&opts.AvailableNow, "available-now", false, "only titles borrowable right now")
-	cmd.Flags().IntVar(&opts.MaxWaitDays, "max-wait", -1, "only titles available within this many days")
-	cmd.Flags().BoolVar(&opts.IncludeRead, "include-read", false, "also show books I've finished")
-	cmd.Flags().IntVar(&opts.Authors, "authors", 10, "how many similar authors")
-	cmd.Flags().IntVar(&opts.PerAuthor, "books", 3, "books shown for each similar author")
-	cmd.Flags().IntVar(&opts.MinWorks, "min-works", authors.DefaultMinWorks, "embedded books a similar author needs")
-	cmd.Flags().IntVar(&opts.Limit, "limit", 50, "show at most this many of the author's own books")
+	q.flags(cmd.Flags())
 	return cmd
 }
 

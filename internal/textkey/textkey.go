@@ -218,6 +218,13 @@ var (
 	ligatures = strings.NewReplacer("ß", "ss", "æ", "ae", "œ", "oe", "ø", "o", "ł", "l", "đ", "d", "þ", "th", "ı", "i")
 )
 
+// Words returns s as Title compares it, without dropping anything: folded
+// to lowercase ASCII, with punctuation as single spaces. It's for loose
+// matching by substring: Words("John le Carré") contains Words("le carre").
+func Words(s string) string {
+	return words(fold(s))
+}
+
 // fold lowercases s and reduces it to ASCII letters where it can:
 // "Brontë" → "bronte", "Straße" → "strasse".
 func fold(s string) string {

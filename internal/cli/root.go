@@ -56,6 +56,7 @@ func newRootCmd() *cobra.Command {
 		newSimilarCmd(g),
 		newAuthorCmd(g),
 		newEvalCmd(g),
+		newSuiteCmd(g),
 		newServeCmd(g),
 		newEmbedCmd(g),
 		newNightlyCmd(g),

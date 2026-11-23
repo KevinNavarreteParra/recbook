@@ -6,18 +6,58 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/search"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
+// similarQuery is what a `similar` command line asks for. The query suite
+// runs saved ones too (suite.go), so the flags and running are kept apart
+// from printing.
+type similarQuery struct {
+	seeds, avoid []string
+	view         string
+	opts         recommend.Options
+}
+
+func (q *similarQuery) flags(fs *pflag.FlagSet) {
+	fs.StringArrayVar(&q.seeds, "seed", nil, "a book I want more like (repeatable)")
+	fs.StringArrayVar(&q.avoid, "not", nil, "a book I want less like (repeatable)")
+	fs.StringVar(&q.view, "view", "blend", "compare by content, genre, or a blend of both")
+	fs.BoolVar(&q.opts.AvailableNow, "available-now", false, "only titles borrowable right now")
+	fs.IntVar(&q.opts.MaxWaitDays, "max-wait", -1, "only titles available within this many days")
+	fs.BoolVar(&q.opts.IncludeRead, "include-read", false, "also recommend books I've finished")
+	fs.BoolVar(&q.opts.Unweighted, "unweighted", false, "count every seed equally")
+	fs.IntVar(&q.opts.PerAuthor, "per-author", 3, "at most this many results by one author (0 for no cap)")
+	fs.Float64Var(&q.opts.Diversity, "diversity", recommend.DefaultDiversity,
+		"trade closeness for variety, 0..1: 0 for the closest matches, higher to range wider")
+	fs.IntVar(&q.opts.Limit, "limit", 20, "show at most this many")
+}
+
+// run finds the seeds by name and recommends. It fills in q.opts.Seeds
+// and q.opts.Avoid, so the caller can tell the used seeds apart.
+func (q *similarQuery) run(ctx context.Context, st *store.Store, languages []string) ([]recommend.Rec, []recommend.Seed, error) {
+	if len(q.seeds) == 0 {
+		return nil, nil, fmt.Errorf("give at least one --seed")
+	}
+	blend, err := recommend.ParseView(q.view)
+	if err != nil {
+		return nil, nil, err
+	}
+	q.opts.Views, q.opts.Languages = blend, languages
+	if q.opts.Seeds, err = resolveSeeds(ctx, st, q.seeds, languages); err != nil {
+		return nil, nil, err
+	}
+	if q.opts.Avoid, err = resolveSeeds(ctx, st, q.avoid, languages); err != nil {
+		return nil, nil, err
+	}
+	return recommend.Similar(ctx, st, q.opts)
+}
+
 func newSimilarCmd(g *globals) *cobra.Command {
-	var (
-		seeds, avoid []string
-		view         string
-		opts         recommend.Options
-	)
+	var q similarQuery
 	cmd := &cobra.Command{
 		Use:   "similar --seed <book> [--seed <book>...]",
 		Short: "Recommend borrowable audiobooks like the books given as seeds",
@@ -33,14 +73,6 @@ func newSimilarCmd(g *globals) *cobra.Command {
   recbook similar --seed "brothers karamazov" --not "da vinci code" --per-author 1`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(seeds) == 0 {
-				return fmt.Errorf("give at least one --seed")
-			}
-			blend, err := recommend.ParseView(view)
-			if err != nil {
-				return err
-			}
-			opts.Views, opts.Languages = blend, g.languages()
 			ctx := cmd.Context()
 			st, err := g.openStore(ctx)
 			if err != nil {
@@ -48,13 +80,7 @@ func newSimilarCmd(g *globals) *cobra.Command {
 			}
 			defer st.Close()
 
-			if opts.Seeds, err = resolveSeeds(ctx, st, seeds, opts.Languages); err != nil {
-				return err
-			}
-			if opts.Avoid, err = resolveSeeds(ctx, st, avoid, opts.Languages); err != nil {
-				return err
-			}
-			recs, used, err := recommend.Similar(ctx, st, opts)
+			recs, used, err := q.run(ctx, st, g.languages())
 			if err != nil {
 				return err
 			}
@@ -62,7 +88,7 @@ func newSimilarCmd(g *globals) *cobra.Command {
 			out := cmd.OutOrStdout()
 			for i, s := range used {
 				role := "seed"
-				if i >= len(opts.Seeds) {
+				if i >= len(q.opts.Seeds) {
 					role = "avoid"
 				}
 				note := fmt.Sprintf("weight %.2f", s.Weight)
@@ -92,17 +118,7 @@ func newSimilarCmd(g *globals) *cobra.Command {
 			return tw.Flush()
 		},
 	}
-	cmd.Flags().StringArrayVar(&seeds, "seed", nil, "a book I want more like (repeatable)")
-	cmd.Flags().StringArrayVar(&avoid, "not", nil, "a book I want less like (repeatable)")
-	cmd.Flags().StringVar(&view, "view", "blend", "compare by content, genre, or a blend of both")
-	cmd.Flags().BoolVar(&opts.AvailableNow, "available-now", false, "only titles borrowable right now")
-	cmd.Flags().IntVar(&opts.MaxWaitDays, "max-wait", -1, "only titles available within this many days")
-	cmd.Flags().BoolVar(&opts.IncludeRead, "include-read", false, "also recommend books I've finished")
-	cmd.Flags().BoolVar(&opts.Unweighted, "unweighted", false, "count every seed equally")
-	cmd.Flags().IntVar(&opts.PerAuthor, "per-author", 3, "at most this many results by one author (0 for no cap)")
-	cmd.Flags().Float64Var(&opts.Diversity, "diversity", recommend.DefaultDiversity,
-		"trade closeness for variety, 0..1: 0 for the closest matches, higher to range wider")
-	cmd.Flags().IntVar(&opts.Limit, "limit", 20, "show at most this many")
+	q.flags(cmd.Flags())
 	return cmd
 }
 

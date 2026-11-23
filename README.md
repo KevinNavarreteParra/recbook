@@ -50,6 +50,7 @@ go run ./cmd/recbook backlog --available-now
 go run ./cmd/recbook author le carre                 # more by them, and authors like them
 
 go run ./cmd/recbook eval                            # how well it ranks books I finished
+go run ./cmd/recbook suite                           # rerun the saved queries; what changed
 ```
 
 Personal data lives in `data/` (gitignored). Hand corrections to matching go
@@ -86,6 +87,17 @@ be compared fairly. Each view (content, genre, and their blend, weighted by
 on the shelves I read most from, and chance, and every book's ranks go to
 `data/review/loo.csv` for comparing runs. Run it before and after a change
 to the ranking.
+
+It then asks whether resemblance predicts finishing: each book I borrowed
+is scored by how much it resembles the other books I finished, and an AUC
+says how well that tells the borrows I finished from those I didn't. On my
+history it doesn't (every view scores below 0.5), because a Libby loan that
+ran out is mostly a long book, not a dislike: length alone scores 0.65.
+
+`recbook suite` reruns a hand-kept list of queries (`data/queries.txt`),
+checks each against what it should return ("top 20 has 14 subject
+espionage"), and lists the books that entered or left its results since
+the last run. The file's format is in [internal/suite](internal/suite).
 
 The views are content (embedded descriptions) and genre (the library's
 subjects, IDF-weighted). `similar` fuses one ranking per seed per view by
@@ -148,7 +160,8 @@ and lists every problem.
 | `search` | keyword (BM25) search, and finding works by name |
 | `recommend` | books like a set of seeds, from the content and genre views |
 | `authors` | who wrote what, each author's mean vector, and author queries |
-| `eval` | leave-one-out over finished books, against baselines |
+| `eval` | leave-one-out over finished books, against baselines; finish/give-up AUC |
+| `suite` | the saved query suite: its file, checks and run-to-run changes |
 | `backlog` | owned or wanted books the library can lend |
 | `enrich` | descriptions from Google Books and Open Library for finished books |
 | `polite` | the rate-limited, retrying HTTP client every online source uses |
