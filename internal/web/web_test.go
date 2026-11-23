@@ -162,7 +162,7 @@ func TestPages(t *testing.T) {
 		t.Error("catalog text must be HTML-escaped")
 	}
 
-	for _, path := range []string{"/recommend", "/backlog", "/listened", "/static/htmx.min.js", "/seeds?q=tinker"} {
+	for _, path := range []string{"/recommend", "/backlog", "/history", "/listened", "/static/htmx.min.js", "/seeds?q=tinker"} {
 		get(t, ts, path)
 	}
 	if opts := get(t, ts, "/seeds?q=tinker"); !strings.Contains(opts, "on my shelf") {
@@ -235,8 +235,8 @@ func TestTracker(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(body, "finished") || !strings.Contains(body, "undo") {
 		t.Fatalf("mark: %d\n%s", code, body)
 	}
-	if got := get(t, ts, "/listened"); !strings.Contains(got, "A Gentleman in Moscow") {
-		t.Error("the history page should list the mark")
+	if got := get(t, ts, "/history"); !strings.Contains(got, `name="from" value="history"`) {
+		t.Error("the history page should list the mark, with undo")
 	}
 
 	// The tracker file is a valid shelf in the contract's format.
@@ -255,5 +255,21 @@ func TestTracker(t *testing.T) {
 	}
 	if code, _ := post(t, ts, "/mark", url.Values{"title_id": {"9011"}, "kind": {"loved"}}, true); code != http.StatusBadRequest {
 		t.Errorf("an unknown mark should be refused, got %d", code)
+	}
+}
+
+func TestHistory(t *testing.T) {
+	ts, _ := app(t)
+	got := get(t, ts, "/history")
+	// The demo's reading app finished it on 2022-03-10; it's titled as the
+	// catalog titles its work.
+	if !strings.Contains(got, "2022-03-10") || !strings.Contains(got, "Tinker Tailor Soldier Spy") {
+		t.Errorf("the history page should list the reading app's finishes:\n%s", got)
+	}
+	if !strings.Contains(got, "From reading_app (loaded ") {
+		t.Errorf("the history page should say where its rows come from:\n%s", got)
+	}
+	if strings.Contains(got, `value="history"`) {
+		t.Error("only marks made here can be undone")
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/KevinNavarreteParra/recbook/internal/backlog"
 	"github.com/KevinNavarreteParra/recbook/internal/contract"
@@ -242,32 +241,6 @@ func (s *Server) backlogPage(w http.ResponseWriter, r *http.Request) {
 		Rows: s.backlogRows(entries), Empty: "Nothing on your backlog matches."}})
 }
 
-// listenedView is the tracker history page.
-type listenedView struct {
-	Entries  []historyRow
-	ThisYear map[string]int // marks this year, by kind label
-}
-
-type historyRow struct {
-	Entry
-	Label  string
-	Latest bool // the item's most recent mark, which Undo removes
-}
-
-func (s *Server) listenedPage(w http.ResponseWriter, r *http.Request) {
-	view := listenedView{ThisYear: map[string]int{}}
-	seen := map[string]bool{}
-	year := time.Now().Year()
-	for _, e := range s.tracker.History() {
-		view.Entries = append(view.Entries, historyRow{Entry: e, Label: markLabel(e.Kind), Latest: !seen[e.Item.ID]})
-		seen[e.Item.ID] = true
-		if e.On.Time().Year() == year {
-			view.ThisYear[markLabel(e.Kind)]++
-		}
-	}
-	s.render(w, r, "listened", page{Nav: "listened", Extra: view})
-}
-
 // mark records a mark for a catalog recording and returns its new actions.
 func (s *Server) mark(w http.ResponseWriter, r *http.Request) {
 	titleID, kind := r.FormValue("title_id"), contract.EventKind(r.FormValue("kind"))
@@ -295,7 +268,7 @@ func (s *Server) undo(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	if r.FormValue("from") == "listened" {
+	if r.FormValue("from") == "history" {
 		w.Header().Set("HX-Refresh", "true") // the history page is simplest to redraw whole
 		return
 	}

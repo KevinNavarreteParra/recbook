@@ -34,7 +34,7 @@ var staticFiles embed.FS
 
 // pages are the templates that render a whole page; each defines "content"
 // inside the shared layout.
-var pages = []string{"search", "recommend", "foryou", "backlog", "listened", "author"}
+var pages = []string{"search", "recommend", "foryou", "backlog", "history", "author"}
 
 // templateFuncs are the helpers templates can call.
 var templateFuncs = template.FuncMap{
@@ -98,7 +98,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /seed-chip", s.seedChip)
 	mux.HandleFunc("GET /backlog", s.backlogPage)
 	mux.HandleFunc("GET /author", s.authorPage)
-	mux.HandleFunc("GET /listened", s.listenedPage)
+	mux.HandleFunc("GET /history", s.historyPage)
+	mux.Handle("GET /listened", http.RedirectHandler("/history", http.StatusMovedPermanently)) // its old name
 	mux.HandleFunc("POST /mark", s.mark)
 	mux.HandleFunc("POST /undo", s.undo)
 	static, _ := fs.Sub(staticFiles, "static")

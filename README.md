@@ -134,8 +134,8 @@ and `foryou` and the web app read it with current availability.
 
 `recbook serve` runs a private web app on 127.0.0.1:8484. It has search as
 you type, recommendations from seeds or "more like this", a "for you" list,
-the backlog, and a
-tracker with listening / finished / gave up / want buttons on every book.
+the backlog, a history of what I've started, finished and given up on, and
+a tracker with listening / finished / gave up / want buttons on every book.
 It reads the copy of the database that `build`, `embed` and the nightly job
 publish, and writes only `data/tracker.jsonl`, which the next build loads
 like any other source. `make web-install` runs it as a sandboxed systemd

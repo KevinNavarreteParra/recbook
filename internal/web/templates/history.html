@@ -1,0 +1,29 @@
+{{define "content"}}
+{{with .Extra}}
+<p class="summary">This year: <b>{{index .ThisYear "finished"}}</b> finished · <b>{{index .ThisYear "gave up"}}</b> gave up · <b>{{index .ThisYear "listening"}}</b> in progress</p>
+<p class="caption">{{with .Sources}}From {{range $i, $s := .}}{{if $i}}, {{end}}{{$s.Name}} (loaded {{$s.On}}){{end}} and the marks made here. {{end}}Marks reach recommendations and tiers after the next nightly run.</p>
+{{if .Rows}}
+<table class="results">
+  <thead><tr><th>When</th><th>Mark</th><th>Title</th><th>Author</th><th></th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+  <tr>
+    <td class="nowrap">{{.On}}</td>
+    <td>{{.Label}}</td>
+    <td class="title">{{.Title}}</td>
+    <td>{{.Author}}</td>
+    <td>{{if and .TitleID .Latest}}
+      <form hx-post="/undo">
+        <input type="hidden" name="title_id" value="{{.TitleID}}">
+        <input type="hidden" name="from" value="history">
+        <button class="link">undo</button>
+      </form>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="empty">Nothing yet. Every book has buttons: listening, finished, gave up, want.</p>
+{{end}}
+{{end}}
+{{end}}
