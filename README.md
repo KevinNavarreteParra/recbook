@@ -137,11 +137,25 @@ you type, recommendations from seeds or "more like this", a "for you" list,
 the backlog, a history of what I've started, finished and given up on, and
 a tracker with listening / finished / gave up / want buttons on every book.
 It reads the copy of the database that `build`, `embed` and the nightly job
-publish, and writes only `data/tracker.jsonl`, which the next build loads
-like any other source. `make web-install` runs it as a sandboxed systemd
-user service. To reach it over Tailscale, run
+publish, and writes only `data/tracker.jsonl` and uploaded exports (below),
+which the next build loads like any other source. `make web-install` runs
+it as a sandboxed systemd user service. To reach it over Tailscale, run
 `tailscale serve --bg --http=8484 http://127.0.0.1:8484` as the Tailscale
 operator.
+
+It also takes exports: `POST /inbox/<source>`, with the export as the body
+and a `Recbook-Upload` header (any value; other sites' pages can't send
+one). It checks the file, saves it to `data/inbox/<source>`, and the next
+build loads it in place of that source's last export. My iPhone sends
+Reading List's each night:
+
+1. A shortcut with two actions: Reading List's **Export Data** (CSV), then
+   **Get Contents of URL** to `http://<machine>.<tailnet>.ts.net:8484/inbox/readinglist`,
+   method POST, header `Recbook-Upload: shortcut`, request body **File**:
+   the export.
+2. An automation that runs it daily at 01:30 (Automation → Time of Day →
+   Run Immediately), so the 02:00 job loads it.
+3. Tailscale on the phone with VPN On Demand, so it's connected then.
 
 ## Nightly job
 
@@ -192,6 +206,6 @@ and lists every problem.
 | `blurb`, `embed`, `ollama` | clean descriptions, embed them, run the local model |
 | `graph` | the graph view: works, authors, series, subjects, narrators and nearest books, walked by personalized PageRank |
 | `nightly` | the night window and GPU guard |
-| `web` | the web app and its tracker |
+| `web` | the web app, its tracker and uploads |
 | `demo` | synthetic data for tests and `recbook demo` |
 | `cli` | one file per command |

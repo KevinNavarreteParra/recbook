@@ -5,8 +5,9 @@
 //
 // The app never writes the main database. It reads the copy that `build`
 // and the nightly job publish (store.Snapshot), reopening it whenever a
-// newer one appears, and it writes only the tracker file. It's meant to be
-// reached over Tailscale and listens on localhost only.
+// newer one appears, and it writes only the tracker file and the exports
+// uploaded to it, which the next build loads. It's meant to be reached
+// over Tailscale and listens on localhost only.
 package web
 
 import (
@@ -17,6 +18,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +56,7 @@ type Server struct {
 	snapshot  string   // path of the published database copy
 	languages []string // search, recommendations and author pages keep recordings in these; nil for any
 	tracker   *Tracker
+	inbox     string                        // where uploaded exports wait for the next build
 	tmpl      map[string]*template.Template // by page name
 
 	mu    sync.RWMutex // guards st and stamp; requests hold it for reading
@@ -65,15 +68,17 @@ type Server struct {
 	graphStamp time.Time
 }
 
-// New opens the published copy and the tracker file. Search,
-// recommendations and author pages show only recordings in languages (ISO
-// 639-1 codes, "en"), or in any language if it's nil.
-func New(ctx context.Context, snapshot, trackerPath string, languages []string) (*Server, error) {
+// New opens the published copy and the tracker file; uploaded exports go
+// to the inbox directory. Search, recommendations and author pages show
+// only recordings in languages (ISO 639-1 codes, "en"), or in any language
+// if it's nil.
+func New(ctx context.Context, snapshot, trackerPath, inbox string, languages []string) (*Server, error) {
 	tracker, err := OpenTracker(trackerPath)
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{snapshot: snapshot, languages: languages, tracker: tracker, tmpl: map[string]*template.Template{}}
+	s := &Server{snapshot: snapshot, languages: languages, tracker: tracker, inbox: inbox,
+		tmpl: map[string]*template.Template{}}
 
 	base := template.Must(template.New("").Funcs(templateFuncs).
 		ParseFS(templateFiles, "templates/layout.html", "templates/partials.html"))
@@ -102,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /listened", http.RedirectHandler("/history", http.StatusMovedPermanently)) // its old name
 	mux.HandleFunc("POST /mark", s.mark)
 	mux.HandleFunc("POST /undo", s.undo)
+	mux.HandleFunc("POST /inbox/{source}", s.upload)
 	static, _ := fs.Sub(staticFiles, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 	return sameOriginWrites(mux)
@@ -191,11 +197,17 @@ func (s *Server) store() (*store.Store, func()) {
 // sameOriginWrites rejects any POST that a page of this app didn't send:
 // browsers mark cross-site requests in Sec-Fetch-Site, and htmx adds
 // HX-Request. That's the CSRF defence; there are no cookies to steal.
+// Uploads come from a Shortcut, not a page, and carry uploadHeader instead.
 func sameOriginWrites(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost &&
-			(r.Header.Get("Sec-Fetch-Site") != "same-origin" || r.Header.Get("HX-Request") != "true") {
-			http.Error(w, "writes are only accepted from this app's own pages", http.StatusForbidden)
+		page := r.Header.Get("Sec-Fetch-Site") == "same-origin" && r.Header.Get("HX-Request") == "true"
+		upload := strings.HasPrefix(r.URL.Path, "/inbox/") && r.Header.Get(uploadHeader) != ""
+		if r.Method == http.MethodPost && !page && !upload {
+			msg := "writes are only accepted from this app's own pages"
+			if strings.HasPrefix(r.URL.Path, "/inbox/") {
+				msg = "an upload needs a " + uploadHeader + " header"
+			}
+			http.Error(w, msg, http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)

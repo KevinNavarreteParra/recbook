@@ -22,7 +22,10 @@ func newServeCmd(g *globals) *cobra.Command {
 		Long: "Serve the web app on --addr (this machine only, by default; reach it over\n" +
 			"Tailscale with `tailscale serve`). It reads the copy of the database that\n" +
 			"`build`, `embed` and the nightly job publish, switching to each new copy\n" +
-			"as it appears, and writes only the tracker file (<data dir>/tracker.jsonl).\n" +
+			"as it appears, and writes only the tracker file (<data dir>/tracker.jsonl)\n" +
+			"and the exports posted to /inbox/<source>, which it saves to <data\n" +
+			"dir>/inbox for the next build to load (see the README for the Shortcut\n" +
+			"that sends Reading List's).\n" +
 			"Search, recommendations and author pages show the --lang languages.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -30,7 +33,7 @@ func newServeCmd(g *globals) *cobra.Command {
 			if _, err := os.Stat(g.servePath()); err != nil {
 				return fmt.Errorf("no published database at %s; run `recbook build` first", g.servePath())
 			}
-			srv, err := web.New(ctx, g.servePath(), g.trackerPath(), g.languages())
+			srv, err := web.New(ctx, g.servePath(), g.trackerPath(), g.inboxDir(), g.languages())
 			if err != nil {
 				return err
 			}

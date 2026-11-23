@@ -92,7 +92,7 @@ func app(t *testing.T) (*httptest.Server, string) {
 	}
 
 	trackerPath := filepath.Join(dir, "tracker.jsonl")
-	srv, err := New(ctx, snapshot, trackerPath, []string{"en"})
+	srv, err := New(ctx, snapshot, trackerPath, filepath.Join(dir, "inbox"), []string{"en"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,5 +271,49 @@ func TestHistory(t *testing.T) {
 	}
 	if strings.Contains(got, `value="history"`) {
 		t.Error("only marks made here can be undone")
+	}
+}
+
+func TestUpload(t *testing.T) {
+	ts, trackerPath := app(t)
+	saved := filepath.Join(filepath.Dir(trackerPath), "inbox", "readinglist")
+	export := "Reading List ID,Google Books ID,ISBN-13,Title,Subtitle,Authors,Page Count," +
+		"Publication Date,Description,Subjects,Language Code,Started Reading,Finished Reading,Did Not Finish\n" +
+		"B1,,,Smiley's People,,\"le Carré, John\",,,,,en,2026-11-01,2026-11-20,\n"
+	upload := func(path, body string, marked bool) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+path, strings.NewReader(body))
+		if marked {
+			req.Header.Set(uploadHeader, "test")
+		}
+		resp, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		reply, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(reply)
+	}
+
+	if code, _ := upload("/inbox/readinglist", export, false); code != http.StatusForbidden {
+		t.Errorf("an upload without its header should be refused, got %d", code)
+	}
+	if code, reply := upload("/inbox/readinglist", export, true); code != http.StatusOK || !strings.Contains(reply, "1 items, 2 events") {
+		t.Fatalf("upload: %d %s", code, reply)
+	}
+	if got, err := os.ReadFile(saved); err != nil || string(got) != export {
+		t.Fatalf("the export should be saved to the inbox as sent: %q, %v", got, err)
+	}
+
+	// Anything that isn't an export is refused, and the last one stays.
+	if code, reply := upload("/inbox/readinglist", "title,author\nDune,Frank Herbert\n", true); code != http.StatusBadRequest ||
+		!strings.Contains(reply, "missing columns") {
+		t.Errorf("a file that isn't an export should be refused: %d %s", code, reply)
+	}
+	if got, _ := os.ReadFile(saved); string(got) != export {
+		t.Error("a refused upload shouldn't replace the last export")
+	}
+	if code, _ := upload("/inbox/tracker", export, true); code != http.StatusNotFound {
+		t.Errorf("only shelf sources take uploads, got %d", code)
 	}
 }

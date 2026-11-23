@@ -12,9 +12,10 @@ RestartSec=5
 Nice=5
 
 # A sandbox: the app sees only the data folder (it writes the tracker
-# file there), its own binary, and DuckDB's extensions. The rest of home
-# (SSH keys, GitHub and password-manager tokens, other repos) doesn't
-# exist inside it, so a bug in the app can't reach them.
+# file and uploaded exports there), its own binary, and DuckDB's
+# extensions. The rest of home (SSH keys, GitHub and password-manager
+# tokens, other repos) doesn't exist inside it, so a bug in the app can't
+# reach them.
 ProtectHome=tmpfs
 BindPaths=%h/utilities/recbook/data
 BindReadOnlyPaths=%h/utilities/recbook/bin %h/.duckdb
