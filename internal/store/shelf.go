@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/KevinNavarreteParra/recbook/internal/contract"
@@ -58,4 +59,15 @@ func (s *Store) ReplaceShelf(ctx context.Context, source, file string, shelf *co
 			source, file, time.Now().UTC(), len(shelf.Items), len(shelf.Events))
 		return err
 	})
+}
+
+// ImportedAt returns when the source was last ingested, or the zero time
+// if it never has been.
+func (s *Store) ImportedAt(ctx context.Context, source string) (time.Time, error) {
+	var at time.Time
+	err := s.db.QueryRowContext(ctx, `SELECT imported_at FROM shelf_import WHERE source = ?`, source).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	return at, err
 }

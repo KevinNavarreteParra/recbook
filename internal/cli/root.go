@@ -106,6 +106,12 @@ func (g *globals) trackerPath() string {
 	return filepath.Join(g.dataDir(), "tracker.jsonl")
 }
 
+// inboxDir is where the web app saves uploaded exports for the next build
+// to load.
+func (g *globals) inboxDir() string {
+	return filepath.Join(g.dataDir(), "inbox")
+}
+
 // envOr returns the environment variable key, or fallback when it is unset.
 func envOr(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok {

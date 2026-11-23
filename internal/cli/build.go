@@ -19,6 +19,7 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
 	"github.com/KevinNavarreteParra/recbook/internal/search"
 	"github.com/KevinNavarreteParra/recbook/internal/signals"
+	"github.com/KevinNavarreteParra/recbook/internal/sources"
 	"github.com/KevinNavarreteParra/recbook/internal/sources/jsonl"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
@@ -31,7 +32,10 @@ func newBuildCmd(g *globals) *cobra.Command {
 			"works, derive dates, labels and tiers, pick the recording to offer for each\n" +
 			"work, weigh each work's subjects for the genre view, and index everything\n" +
 			"for search. Recordings and descriptions in the --lang languages are\n" +
-			"chosen first. Safe to rerun; it never changes ingested data.\n\n" +
+			"chosen first. Safe to rerun.\n\n" +
+			"First it loads the web app's tracker marks and any export uploaded to it\n" +
+			"since that source's last ingest (<data dir>/inbox/<source>), each in\n" +
+			"place of what the source had; otherwise it never changes ingested data.\n\n" +
 			"Reads <data dir>/match_overrides.csv if present and writes the matches\n" +
 			"worth checking to <data dir>/review/matches.csv, where <data dir> is the\n" +
 			"folder holding the database.",
@@ -48,11 +52,15 @@ func newBuildCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
-// build folds in the web app's tracker marks, runs every derived-table
-// stage in order, publishes the copy the web app reads, and prints what it
-// found.
+// build loads any uploaded exports, folds in the web app's tracker marks,
+// runs every derived-table stage in order, publishes the copy the web app
+// reads, and prints what it found.
 func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) error {
 	dataDir := g.dataDir()
+	uploaded, err := ingestInbox(ctx, st, g.inboxDir())
+	if err != nil {
+		return err
+	}
 	if err := ingestTracker(ctx, st, g.trackerPath()); err != nil {
 		return err
 	}
@@ -97,6 +105,9 @@ func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) erro
 	}
 	slices.Sort(methods)
 
+	for _, line := range uploaded {
+		fmt.Fprintf(out, "uploaded %s\n", line)
+	}
 	fmt.Fprintf(out, "records  %d shelf, %d catalog\n", rep.ShelfRecords, rep.CatalogRecords)
 	fmt.Fprintf(out, "matches  %s\n", strings.Join(methods, ", "))
 	if rep.OverridesApplied > 0 {
@@ -151,4 +162,44 @@ func ingestTracker(ctx context.Context, st *store.Store, path string) error {
 		return fmt.Errorf("tracker %s: %w", path, err)
 	}
 	return st.ReplaceShelf(ctx, "tracker", path, shelf)
+}
+
+// ingestInbox loads the exports waiting in the inbox, where the web app
+// saves each one uploaded to it (a Shortcut on my phone sends Reading
+// List's), under its source's name: <inbox>/readinglist. An export is
+// loaded only if it's newer than the source's last ingest, so a manual
+// `recbook ingest` since then wins. It returns a line for each one loaded.
+func ingestInbox(ctx context.Context, st *store.Store, dir string) ([]string, error) {
+	var loaded []string
+	for _, src := range sources.ShelfSources {
+		path := filepath.Join(dir, src.Name)
+		info, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		last, err := st.ImportedAt(ctx, src.Name)
+		if err != nil {
+			return nil, err
+		}
+		if !info.ModTime().After(last) {
+			continue
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		shelf, err := src.Read(f)
+		f.Close()
+		if err != nil {
+			return nil, fmt.Errorf("uploaded %s: %w", path, err)
+		}
+		if err := st.ReplaceShelf(ctx, src.Name, path, shelf); err != nil {
+			return nil, fmt.Errorf("uploaded %s: %w", path, err)
+		}
+		loaded = append(loaded, fmt.Sprintf("%s: %d items, %d events", src.Name, len(shelf.Items), len(shelf.Events)))
+	}
+	return loaded, nil
 }
