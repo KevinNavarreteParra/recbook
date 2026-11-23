@@ -114,9 +114,12 @@ authors, series, subjects and narrators, and to each book's 15 nearest
 books in the content view, and ranks books by personalized PageRank: a
 walk from the seed that keeps restarting there. Asked with one seed, it
 ranks held-out books best of the views (hit@10 44% against the blend's
-36%), and without the nearest-book edges it falls to 36%. Finding those
-edges compares every book with every other, several minutes on every
-core, so only the nightly job (or `recbook neighbours`) does it.
+36%), and without the nearest-book edges it falls to 36%. But much of that
+is more by the seed's author and series, and on the query suite it strays
+(from The Trial to courtroom thrillers), so `similar` keeps the blend and
+takes the graph only with `--view graph`. Finding the nearest-book edges
+compares every book with every other, several minutes on every core, so
+only the nightly job (or `recbook neighbours`) does it.
 
 `foryou` recommends from every book I've finished at once. Fusing four
 hundred seeds by reciprocal rank rewards breadth: the top fills with

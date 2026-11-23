@@ -95,6 +95,14 @@ type Blend map[View]float64
 // 0.25, 0.5, 0.75, 1 and 2, with content at 1, 0.75 ranked held-out books
 // best in the leave-one-out evaluation's one-seed protocol (hit@10 34%
 // against content's 29%), and each blend beat either view alone.
+//
+// The graph is left out, though it ranks held-out books better still
+// (hit@10 44% against 36%): much of that is more by the seed's author and
+// series, and on the saved query suite it strays. From The Trial it
+// follows OverDrive's "legal thriller" shelf to courtroom novels, and its
+// nearest-book edges tie together books with "castle" in the title; it
+// failed 5 of the suite's 20 checks, the blend 2. Blending it in by rank
+// gained little (hit@10 at most 40%). It does make the "for you" list.
 var DefaultBlend = Blend{Content: 1, Genre: 0.75}
 
 // ParseView returns the blend a --view name stands for: one view alone,
