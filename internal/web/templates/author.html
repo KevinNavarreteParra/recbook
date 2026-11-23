@@ -18,7 +18,7 @@
 <h3>Similar authors</h3>
 {{with .Note}}<p class="empty">{{.}}</p>{{end}}
 {{range .Similar}}
-<h4><a href="/author?name={{.Name}}">{{.Name}}</a> <span class="sub">{{printf "%.2f" .Similarity}} · {{.Embedded}} books{{if .Finished}} · {{.Finished}} finished{{end}}</span></h4>
+<h4><a href="/author?name={{.Name}}">{{.Name}}</a> <span class="sub">{{printf "%.2f" .Similarity}} · {{.Embedded}} books{{if .Finished}} · {{.Finished}} finished{{end}}{{range .Spellings}} · maybe also credited as <a href="/author?name={{.Name}}">{{.Name}}</a>{{end}}</span></h4>
 {{template "results" .Books}}
 {{end}}
 </div>

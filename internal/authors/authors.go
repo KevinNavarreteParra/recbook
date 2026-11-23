@@ -189,6 +189,10 @@ type Neighbour struct {
 	Embedded   int     // works their vector averages
 	Similarity float64 // cosine of the two authors' vectors
 	Books      []Book
+	// Spellings are other near authors whose name differs from this one's
+	// by a letter or two in one word: most likely the same person, and so
+	// noted here rather than listed again further down.
+	Spellings []Author
 }
 
 // Result is the answer to an author query: the two sections of spec §8.
@@ -263,10 +267,17 @@ func Lookup(ctx context.Context, st *store.Store, id string, opts Options) (*Res
 		return nil, fmt.Errorf("authors like %s: %w", a.Name, err)
 	}
 	for _, n := range near {
-		switch {
-		case textkey.LikelySamePerson(id, n.ID):
+		if textkey.LikelySamePerson(id, n.ID) {
 			res.Spellings = append(res.Spellings, n.Author)
-		case len(res.Similar) < opts.Authors:
+			continue
+		}
+		// Nearest first, so a spelling of a neighbour already listed is
+		// the farther of the two.
+		if i := slices.IndexFunc(res.Similar, func(s Neighbour) bool { return textkey.LikelySamePerson(s.ID, n.ID) }); i >= 0 {
+			res.Similar[i].Spellings = append(res.Similar[i].Spellings, n.Author)
+			continue
+		}
+		if len(res.Similar) < opts.Authors {
 			res.Similar = append(res.Similar, n)
 		}
 	}

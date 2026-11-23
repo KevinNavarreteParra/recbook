@@ -125,6 +125,9 @@ func printAuthor(out io.Writer, res *authors.Result, others []authors.Author) {
 		if n.Finished > 0 {
 			read = fmt.Sprintf(", %d finished", n.Finished)
 		}
+		for _, s := range n.Spellings {
+			read += "; maybe also credited as " + s.Name
+		}
 		// No tab, so the author's line doesn't widen the title column.
 		fmt.Fprintf(tw, "  %s (%.2f; %s%s)\n", n.Name, n.Similarity, plural(int64(n.Embedded), "book"), read)
 		for _, b := range n.Books {

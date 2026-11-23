@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,6 +263,31 @@ func TestLookupSetsAsideOtherSpellings(t *testing.T) {
 		if n.ID == "fyodor dostoyevsky" {
 			t.Error("another spelling of him isn't a similar author")
 		}
+	}
+}
+
+// Two spellings of one neighbour are listed once, the nearer, with the
+// other noted.
+func TestLookupListsANeighbourOnce(t *testing.T) {
+	st := setup(t, contract.CatalogTitle{ID: "9950", Title: "Fathers and Sons", Format: contract.Audiobook,
+		Language: "en", DurationMin: 600, Description: "Brothers in provincial Russia argue about faith.",
+		Creators: []contract.Creator{{Name: "Ivan Turgenev", Role: contract.Author}}})
+	res, err := Lookup(context.Background(), st, "ivan turgenev", Options{MaxWaitDays: -1, MinWorks: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dostoevskys []Neighbour
+	for _, n := range res.Similar {
+		if strings.HasPrefix(n.ID, "fyodor dosto") {
+			dostoevskys = append(dostoevskys, n)
+		}
+	}
+	if len(dostoevskys) != 1 || len(dostoevskys[0].Spellings) != 1 {
+		t.Fatalf("Dostoevsky should be listed once, with his other spelling noted: %+v", res.Similar)
+	}
+	if got := []string{dostoevskys[0].Name, dostoevskys[0].Spellings[0].Name}; !slices.Contains(got, "Fyodor Dostoevsky") ||
+		!slices.Contains(got, "Fyodor Dostoyevsky") {
+		t.Errorf("spellings = %q", got)
 	}
 }
 
