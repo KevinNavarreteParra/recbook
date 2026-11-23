@@ -121,11 +121,11 @@ core, so only the nightly job (or `recbook neighbours`) does it.
 `foryou` recommends from every book I've finished at once. Fusing four
 hundred seeds by reciprocal rank rewards breadth: the top fills with
 surveys that every seed lists somewhere, and forty-odd philosophy seeds
-vote as one block. So the seeds are first put into groups that read alike
-(leader clustering on content vectors less their mean), each group is
-fused alone, and the groups take turns at the list in proportion to their
-weight. `build` makes the list, since it ranks the catalog for every
-finished book; `foryou` and the web app read it with current availability.
+vote as one block (0.4% of held-out books in the top 50). Grouping the
+seeds by taste and giving each group its share of places got 6.7%; one
+walk of the graph from every finished book at once gets 9.9%, and its top
+30 still spans two dozen shelves, so that's the list. `build` makes it,
+and `foryou` and the web app read it with current availability.
 
 ## Web app
 

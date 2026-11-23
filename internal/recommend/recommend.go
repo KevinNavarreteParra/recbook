@@ -201,8 +201,6 @@ type Rec struct {
 	Like       string  // the seed it's most similar to: the "why"
 	Similarity float64 // ...and how similar, as a cosine
 	View       View    // ...in this view: content if any seed's content ranking found it
-
-	Group int // in a "for you" list, the group of seeds whose turn it filled (see Interleave)
 }
 
 // SimilarityText is the similarity to the closest seed, for showing:
@@ -484,20 +482,34 @@ func authorKey(credit string) string {
 // the seed's vector with every embedded work's, the genre view the seed's
 // subjects with every shelved work's.
 func neighbours(ctx context.Context, db *sql.DB, v View, s Seed, exclude []int64, opts Options, depth int) ([]Rec, error) {
+	query, args := contentSQL, []any{sql.Named("seed", s.vector), sql.Named("model", opts.Model)}
+	switch v {
+	case Genre:
+		query, args = genreSQL, []any{sql.Named("seed", s.WorkID)}
+	case Graph:
+		walked := opts.Graph.Rank(map[int64]float64{s.WorkID: 1}, cmp.Or(opts.GraphAlpha, GraphAlpha))
+		ids, scores := relative(walked[:min(len(walked), walkDepth)], s.WorkID)
+		return walkedNeighbours(ctx, db, v, ids, scores, exclude, opts, depth)
+	}
+	return query1(ctx, db, v, query, args, exclude, opts, depth)
+}
+
+// walkedNeighbours keeps the borrowable works among walked ones (ids,
+// with their scores, best first) that opts allows, at most depth of them,
+// as recommendations in view v (graph_neighbours.sql).
+func walkedNeighbours(ctx context.Context, db *sql.DB, v View, ids []int64, scores []float64, exclude []int64, opts Options, depth int) ([]Rec, error) {
+	return query1(ctx, db, v, graphSQL, []any{sql.Named("ids", ids), sql.Named("scores", scores)}, exclude, opts, depth)
+}
+
+// query1 runs one view's ranking query with opts' filters, and reads its
+// rows as recommendations in view v.
+func query1(ctx context.Context, db *sql.DB, v View, query string, args []any, exclude []int64, opts Options, depth int) ([]Rec, error) {
 	languages := opts.Languages
 	if exclude == nil {
 		exclude = []int64{} // a NULL list would exclude everything
 	}
 	if languages == nil {
 		languages = []string{} // ...and a NULL list of languages would keep nothing
-	}
-	query, args := contentSQL, []any{sql.Named("seed", s.vector), sql.Named("model", opts.Model)}
-	switch v {
-	case Genre:
-		query, args = genreSQL, []any{sql.Named("seed", s.WorkID)}
-	case Graph:
-		ids, scores := walk(opts.Graph, s.WorkID, cmp.Or(opts.GraphAlpha, GraphAlpha))
-		query, args = graphSQL, []any{sql.Named("ids", ids), sql.Named("scores", scores)}
 	}
 	rows, err := db.QueryContext(ctx, query, append(args,
 		sql.Named("exclude", exclude),
@@ -534,17 +546,16 @@ const GraphAlpha = 0.3
 // that filters them: enough that "available now" leaves plenty.
 const walkDepth = 20000
 
-// walk ranks every work from one seed in the graph, and returns the best
-// walkDepth of them with their scores, scaled so the best is 1: a PageRank
-// is a tiny number, and only its order means anything.
-func walk(g *graph.Graph, seed int64, alpha float64) ([]int64, []float64) {
-	scores := g.Rank(map[int64]float64{seed: 1}, alpha)
-	scores = scores[:min(len(scores), walkDepth)]
+// relative splits a walk's scores into ids and scores, leaving out the
+// seed (where the walk starts, so it's always first; -1 for none), with
+// the scores scaled so the best is 1: a PageRank is a tiny number, and
+// only its order means anything.
+func relative(scores []graph.Score, seed int64) ([]int64, []float64) {
 	ids := make([]int64, 0, len(scores))
 	out := make([]float64, 0, len(scores))
 	for _, s := range scores {
 		if s.WorkID == seed {
-			continue // the walk starts there, so it's always first
+			continue
 		}
 		ids = append(ids, s.WorkID)
 		out = append(out, s.Score)

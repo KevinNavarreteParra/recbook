@@ -14,8 +14,8 @@
 //     is query by example, with the best query I could have made.
 //
 // The views (content, genre, graph, and their blend) are ranked by the real
-// recommend code, and under history so is the "for you" list, which
-// groups the seeds by taste before fusing (recommend.ForYou). Two
+// recommend code, and under history so is the "for you" list, one walk of
+// the graph from every seed at once (recommend.ForYou). Two
 // baselines and chance rank the same books from the same pool
 // (baselines.sql), so the numbers have something to beat.
 //
@@ -25,6 +25,7 @@
 package eval
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	_ "embed"
@@ -67,9 +68,6 @@ type Options struct {
 	Unweighted bool            // count every seed equally, ignoring tiers
 	PerAuthor  int             // as in recommend.Options; 0 for no cap
 	Diversity  float64         // as in recommend.Options; 0 for none
-	// GroupThreshold is how alike seeds must be to share a group in the
-	// "for you" method; 0 means recommend.GroupThreshold.
-	GroupThreshold float64
 	// GraphAlpha is the graph walk's restart probability; 0 means
 	// recommend.GraphAlpha.
 	GraphAlpha float64
@@ -176,9 +174,6 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 	}
 	if opts.Blend == nil {
 		opts.Blend = recommend.DefaultBlend
-	}
-	if opts.GroupThreshold == 0 {
-		opts.GroupThreshold = recommend.GroupThreshold
 	}
 
 	finished, targets, err := loadFinished(ctx, st, opts.Model)
@@ -298,12 +293,11 @@ func rankViews(ctx context.Context, st *store.Store, finished []int64, targets [
 		results.set("one seed", m.method, f.oneSeed(weighed))
 	}
 
-	mean, err := recommend.LoadMean(ctx, st, opts.Model)
+	pool, err := loadPool(ctx, st)
 	if err != nil {
 		return 0, err
 	}
-	weighed := recommend.Weigh(rankings, recommend.Options{Views: opts.Blend, Unweighted: opts.Unweighted})
-	results.set("history", "for you", f.forYou(weighed, seeds, mean))
+	results.set("history", "for you", f.forYou(g, seeds, pool))
 
 	seeded := map[int64]bool{}
 	for _, r := range rankings {
@@ -368,49 +362,63 @@ func (f fusion) history(rankings []recommend.Ranking) []outcome {
 }
 
 // forYou ranks each target in the "for you" list made from every other
-// seed: grouped by taste, each group fused alone, and the groups
-// interleaved, as recommend.ForYou does. Targets are ranked in parallel,
-// since each is grouped and fused afresh.
-func (f fusion) forYou(rankings []recommend.Ranking, seeds []recommend.Seed, mean []float32) []outcome {
-	ranked := map[int64]bool{}
-	for _, r := range rankings {
-		ranked[r.Seed.WorkID] = true
-	}
-	var compared []recommend.Seed // seeds with a ranking in the blend's views
+// seed, one walk of the graph from all of them (recommend.WalkHistory),
+// kept to the pool and capped per author as recommend.ForYou does.
+// Targets are walked in parallel.
+func (f fusion) forYou(g *graph.Graph, seeds []recommend.Seed, pool map[int64]recommend.Rec) []outcome {
+	alpha := cmp.Or(f.opts.GraphAlpha, recommend.GraphAlpha)
+	var walkable []recommend.Seed
 	for _, s := range seeds {
-		if ranked[s.WorkID] {
+		if s.Has(recommend.Graph) {
 			if f.opts.Unweighted {
 				s.Weight = 1
 			}
-			compared = append(compared, s)
+			walkable = append(walkable, s)
 		}
 	}
-
 	out := make([]outcome, len(f.targets))
-	var g errgroup.Group
-	g.SetLimit(runtime.GOMAXPROCS(0))
+	var eg errgroup.Group
+	eg.SetLimit(runtime.GOMAXPROCS(0))
 	for i, t := range f.targets {
-		g.Go(func() error {
-			var rest []recommend.Seed
-			for _, s := range compared {
-				if s.WorkID != t.WorkID {
-					rest = append(rest, s)
+		eg.Go(func() error {
+			rest := slices.DeleteFunc(slices.Clone(walkable), func(s recommend.Seed) bool { return s.WorkID == t.WorkID })
+			var near []recommend.Rec
+			for _, s := range recommend.WalkHistory(g, rest, nil, alpha) {
+				r, ok := pool[s.WorkID]
+				if !ok || (f.isFinished[s.WorkID] && s.WorkID != t.WorkID) {
+					continue
+				}
+				if near = append(near, r); len(near) == 3*f.opts.MaxRank {
+					break
 				}
 			}
-			var pos []recommend.Ranking
-			for _, r := range rankings {
-				if r.Seed.WorkID != t.WorkID {
-					pos = append(pos, holdOut(r, t.WorkID, f.isFinished))
-				}
-			}
-			groups := recommend.GroupSeeds(rest, mean, f.opts.GroupThreshold)
-			recs := recommend.FuseGroups(groups, pos, nil, recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: f.opts.MaxRank})
+			recs := recommend.Fuse([]recommend.Ranking{{Weight: 1, Near: near}}, nil,
+				recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: f.opts.MaxRank})
 			out[i] = rankOf(t.WorkID, recs)
 			return nil
 		})
 	}
-	g.Wait()
+	eg.Wait()
 	return out
+}
+
+// loadPool returns every borrowable work, with its author for the
+// per-author cap: what the "for you" walk may recommend.
+func loadPool(ctx context.Context, st *store.Store) (map[int64]recommend.Rec, error) {
+	rows, err := st.DB().QueryContext(ctx, `SELECT work_id, coalesce(author, '') FROM borrowable`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	pool := map[int64]recommend.Rec{}
+	for rows.Next() {
+		var r recommend.Rec
+		if err := rows.Scan(&r.WorkID, &r.Author); err != nil {
+			return nil, err
+		}
+		pool[r.WorkID] = r
+	}
+	return pool, rows.Err()
 }
 
 // oneSeed fuses each seed's rankings alone (a seed has one per view), for

@@ -3,7 +3,7 @@
 SELECT
     b.work_id, b.title_id, b.title, b.author, b.narrator, b.duration_min, b.abridged,
     b.available, b.wait_days, b.holds, b.url, s.tier,
-    f."like", f.similarity, f.view
+    f."like", f.similarity
 FROM for_you f
 JOIN borrowable b USING (work_id)
 LEFT JOIN work_signal s USING (work_id)

@@ -187,8 +187,8 @@ func TestRecommendPage(t *testing.T) {
 func TestForYouPage(t *testing.T) {
 	ts, _ := app(t)
 	page := get(t, ts, "/foryou")
-	if !strings.Contains(page, "finished books in") || !strings.Contains(page, `<div class="why">like `) {
-		t.Errorf("the for-you page should list recommendations, saying why, and its groups:\n%s", page)
+	if !strings.Contains(page, "From the ") || !strings.Contains(page, `<div class="why">like `) {
+		t.Errorf("the for-you page should list recommendations, saying why, and what it's from:\n%s", page)
 	}
 	if strings.Contains(page, "El topo") || strings.Contains(page, ">Tinker Tailor Soldier Spy<") {
 		t.Errorf("for you should show only unread recordings in my languages:\n%s", page)

@@ -175,7 +175,7 @@ func (s *Server) forYouPage(w http.ResponseWriter, r *http.Request) {
 	defer done()
 	f := readFilters(r.URL.Query())
 	min, max := f.minutes()
-	recs, groups, err := recommend.ListForYou(r.Context(), st, recommend.ListOptions{
+	recs, walked, err := recommend.ListForYou(r.Context(), st, recommend.ListOptions{
 		AvailableNow: f.AvailableNow, MaxWaitDays: f.maxWaitDays(), MinMinutes: min, MaxMinutes: max,
 		Languages: s.languages, Limit: 30,
 	})
@@ -183,27 +183,13 @@ func (s *Server) forYouPage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	view := &rowsView{Rows: s.recommendRows(recs), Caption: groupsCaption(groups),
+	caption := ""
+	if walked.Finished > 0 {
+		caption = fmt.Sprintf("From the %s you've finished.", plural(int64(walked.Finished), "book"))
+	}
+	view := &rowsView{Rows: s.recommendRows(recs), Caption: caption,
 		Empty: "Nothing matches these filters, or the list hasn't been made yet (recbook build makes it)."}
 	s.render(w, r, "foryou", page{Nav: "foryou", Filters: f, Results: view})
-}
-
-// groupsCaption sums up the groups of seeds behind the "for you" list:
-// how many, and the largest few.
-func groupsCaption(groups []recommend.GroupSummary) string {
-	if len(groups) == 0 {
-		return ""
-	}
-	seeds := 0
-	for _, g := range groups {
-		seeds += g.Seeds
-	}
-	var largest []string
-	for _, g := range groups[:min(4, len(groups))] {
-		largest = append(largest, fmt.Sprintf("%s (%d)", g.Title, g.Seeds))
-	}
-	return fmt.Sprintf("From %s in %s; the largest are around %s.",
-		plural(int64(seeds), "finished book"), plural(int64(len(groups)), "group"), strings.Join(largest, ", "))
 }
 
 // seedOptions suggests seeds as I type, books on my shelf first.
@@ -374,10 +360,18 @@ func (s *Server) recommendRows(recs []recommend.Rec) []row {
 			WorkID: r.WorkID, TitleID: r.TitleID, Title: r.Title, Author: r.Author, Narrator: r.Narrator,
 			Length: hoursMinutes(r.DurationMin, r.Abridged), Available: r.Available,
 			Availability: availability(r.Available, r.WaitDays, r.Holds), Mine: tierLabel(r.Tier),
-			Why: fmt.Sprintf("like %s (%s)", r.Like, r.SimilarityText()), URL: r.URL,
+			Why: why(r), URL: r.URL,
 		}))
 	}
 	return out
+}
+
+// why says which seed a recommendation is most like, if any.
+func why(r recommend.Rec) string {
+	if r.Like == "" {
+		return ""
+	}
+	return fmt.Sprintf("like %s (%s)", r.Like, r.SimilarityText())
 }
 
 func (s *Server) backlogRows(entries []backlog.Entry) []row {

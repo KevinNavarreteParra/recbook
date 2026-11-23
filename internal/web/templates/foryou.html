@@ -1,6 +1,6 @@
 {{define "content"}}
 <form class="search" action="/foryou" method="get" hx-get="/foryou" hx-target="#results" hx-push-url="true" hx-trigger="change">
-  <p class="caption">From everything I've finished, grouped by taste. Each group gets places in proportion to how much of my reading it is.</p>
+  <p class="caption">Where a walk from everything I've finished leads: through authors, series, shelves and books that read alike.</p>
   <div class="filters">
     <label><input type="checkbox" name="now" value="1"{{if .Filters.AvailableNow}} checked{{end}}> available now</label>
     {{template "wait-select" .Filters.MaxWait}}

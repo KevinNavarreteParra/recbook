@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -25,7 +24,7 @@ func (q *forYouQuery) flags(fs *pflag.FlagSet) {
 	fs.IntVar(&q.opts.Limit, "limit", 30, "show at most this many")
 }
 
-func (q *forYouQuery) run(ctx context.Context, st *store.Store, languages []string) ([]recommend.Rec, []recommend.GroupSummary, error) {
+func (q *forYouQuery) run(ctx context.Context, st *store.Store, languages []string) ([]recommend.Rec, recommend.Walked, error) {
 	q.opts.Languages = languages
 	return recommend.ListForYou(ctx, st, q.opts)
 }
@@ -33,21 +32,18 @@ func (q *forYouQuery) run(ctx context.Context, st *store.Store, languages []stri
 func newForYouCmd(g *globals) *cobra.Command {
 	var (
 		q       forYouQuery
-		groups  int
 		rebuild bool
 	)
 	cmd := &cobra.Command{
 		Use:   "foryou",
 		Short: "Recommend from everything I've finished",
-		Long: "Recommend audiobooks the library can lend from my whole history: every\n" +
-			"book I've finished is a seed, counted by its tier, and every book I tried\n" +
-			"and gave up on pushes its likes down. The seeds are first put into groups\n" +
-			"that read alike, each group's seeds are fused alone, and the groups take\n" +
-			"turns at the list in proportion to their weight, so no one taste crowds\n" +
-			"out the rest. Each result says which seed it's closest to.\n\n" +
-			"Making the list ranks the catalog for every finished book, so `recbook\n" +
-			"build` makes it (and `recbook embed`, when it adds vectors), and this reads\n" +
-			"it, with the library's latest availability. --rebuild makes it afresh.",
+		Long: "Recommend audiobooks the library can lend from my whole history: one walk\n" +
+			"of the graph view from every book I've finished, each counted by its tier,\n" +
+			"less half a walk from the books I tried and gave up on. Each result says\n" +
+			"which finished book it reads most like.\n\n" +
+			"`recbook build` makes the list (and `embed` and `neighbours` remake it\n" +
+			"when they change the graph), and this reads it, with the library's latest\n" +
+			"availability. --rebuild makes it afresh first.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -62,42 +58,32 @@ func newForYouCmd(g *globals) *cobra.Command {
 					return err
 				}
 			}
-			recs, gs, err := q.run(ctx, st, g.languages())
+			recs, walked, err := q.run(ctx, st, g.languages())
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			printGroups(out, gs, groups)
+			fmt.Fprintf(out, "from %s, and away from the %d I gave up on\n\n",
+				plural(int64(walked.Finished), "finished book"), walked.GaveUp)
 			if len(recs) == 0 {
 				fmt.Fprintln(out, "no recommendations")
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "title\tauthor\tlength\tavailability\tmine\tclosest to\tlink")
+			fmt.Fprintln(tw, "title\tauthor\tlength\tavailability\tmine\tmost like\tlink")
 			for _, r := range recs {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s (%s)\t%s\n", r.Title, r.Author,
+				like := ""
+				if r.Like != "" {
+					like = fmt.Sprintf("%s (%s)", r.Like, r.SimilarityText())
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Title, r.Author,
 					hoursMinutes(r.DurationMin, r.Abridged), availabilityText(r.Available, r.WaitDays, r.Holds),
-					mine(r.Tier), r.Like, r.SimilarityText(), r.URL)
+					mine(r.Tier), like, r.URL)
 			}
 			return tw.Flush()
 		},
 	}
 	q.flags(cmd.Flags())
-	cmd.Flags().IntVar(&groups, "groups", 8, "list this many of the largest groups of seeds")
-	cmd.Flags().BoolVar(&rebuild, "rebuild", false, "make the list afresh first (a minute or so)")
+	cmd.Flags().BoolVar(&rebuild, "rebuild", false, "make the list afresh first")
 	return cmd
-}
-
-// printGroups says how many seeds and groups there are and lists the n
-// heaviest groups, each by its leader and size.
-func printGroups(out io.Writer, groups []recommend.GroupSummary, n int) {
-	seeds := 0
-	for _, g := range groups {
-		seeds += g.Seeds
-	}
-	fmt.Fprintf(out, "%s in %s; the largest:\n", plural(int64(seeds), "finished book"), plural(int64(len(groups)), "group"))
-	for _, g := range groups[:min(n, len(groups))] {
-		fmt.Fprintf(out, "  %3d  %s, %s\n", g.Seeds, g.Title, g.Author)
-	}
-	fmt.Fprintln(out)
 }

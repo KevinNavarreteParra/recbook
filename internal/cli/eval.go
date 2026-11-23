@@ -118,8 +118,6 @@ func newEvalCmd(g *globals) *cobra.Command {
 	cmd.Flags().Float64Var(&opts.Diversity, "diversity", recommend.DefaultDiversity, "trade closeness for variety, 0..1, as in similar")
 	cmd.Flags().IntVar(&opts.PerAuthor, "per-author", 3, "at most this many results by one author, as in similar (0 for no cap)")
 	cmd.Flags().IntVar(&opts.MaxRank, "max-rank", 1000, "count a book ranked below this as missed")
-	cmd.Flags().Float64Var(&opts.GroupThreshold, "group-threshold", recommend.GroupThreshold,
-		"how alike seeds must be to share a group in the for-you list, as a centred cosine")
 	return cmd
 }
 
