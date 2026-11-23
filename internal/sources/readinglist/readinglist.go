@@ -4,9 +4,11 @@
 // What the export holds, as of November 2026:
 //
 //   - One row per book, with a stable "Reading List ID".
-//   - "Started Reading", "Finished Reading" and "Did Not Finish" dates,
-//     typed in by hand. They often share one day, and early ones were
-//     logged in catch-up batches.
+//   - "Started Reading" and "Finished Reading" dates, typed in by hand.
+//     They often share one day, and early ones were logged in catch-up
+//     batches.
+//   - "Did Not Finish", a flag ("Y"), not a date. Such a book's finish
+//     date, when it has one, is the day I gave up.
 //   - A book with none of those dates is on the to-read list. There is no
 //     "date added" column, so those wanted events are undated, and a book's
 //     to-read history is lost once it is started.
@@ -77,15 +79,28 @@ func Read(r io.Reader) (*contract.Shelf, error) {
 		}
 		shelf.Items = append(shelf.Items, item)
 
-		// Each reading date becomes an event; a book with none is to-read.
+		var gaveUp bool
+		switch flag := get("Did Not Finish"); flag {
+		case "":
+		case "Y":
+			gaveUp = true
+		default:
+			return nil, at(fmt.Sprintf("Did Not Finish %q: want Y or nothing", flag))
+		}
+		end := contract.Finished
+		if gaveUp {
+			end = contract.Abandoned
+		}
+
+		// Each reading date becomes an event; a book with none is to-read,
+		// unless I gave up on it without saying when.
 		dated := false
 		for _, d := range []struct {
 			column string
 			kind   contract.EventKind
 		}{
 			{"Started Reading", contract.Started},
-			{"Finished Reading", contract.Finished},
-			{"Did Not Finish", contract.Abandoned},
+			{"Finished Reading", end},
 		} {
 			value := get(d.column)
 			if value == "" {
@@ -100,7 +115,10 @@ func Read(r io.Reader) (*contract.Shelf, error) {
 			})
 			dated = true
 		}
-		if !dated {
+		switch {
+		case gaveUp && get("Finished Reading") == "":
+			shelf.Events = append(shelf.Events, contract.ShelfEvent{ItemID: item.ID, Kind: contract.Abandoned})
+		case !dated:
 			shelf.Events = append(shelf.Events, contract.ShelfEvent{ItemID: item.ID, Kind: contract.Wanted})
 		}
 	}
