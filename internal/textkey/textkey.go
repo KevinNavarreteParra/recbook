@@ -40,86 +40,98 @@ func MainTitle(title string) string {
 }
 
 // Author returns the key for a person's name: the last word of the surname
-// and the first initial, "tolkien j". It reads both "First Last" and
-// "Last, First", ignores particles ("le", "de", "van") by keeping only the
-// surname's last word, and drops suffixes such as "Jr." and "III".
+// and the first initial, "tolkien j". It reads names as parseName does,
+// and ignores particles ("le", "de", "van") by keeping only the surname's
+// last word.
 func Author(name string) string {
-	s := strings.ReplaceAll(fold(name), ".", " ")
-
-	var surname, given string
-	if last, first, ok := strings.Cut(s, ","); ok {
-		surname = last
-		given, _, _ = strings.Cut(first, ",") // "King, Martin Luther, Jr." keeps "Martin Luther"
-	} else {
-		parts := strings.Fields(words(s))
-		for len(parts) > 1 && suffixes[parts[len(parts)-1]] {
-			parts = parts[:len(parts)-1]
-		}
-		if len(parts) == 0 {
-			return ""
-		}
-		surname = parts[len(parts)-1]
-		given = strings.Join(parts[:len(parts)-1], " ")
-	}
-
-	surnameWords := strings.Fields(words(surname))
-	if len(surnameWords) == 0 {
+	given, family := parseName(name)
+	if len(family) == 0 {
 		return ""
 	}
-	key := surnameWords[len(surnameWords)-1]
-	if g := strings.Fields(words(given)); len(g) > 0 {
-		key += " " + g[0][:1]
+	key := family[len(family)-1]
+	if len(given) > 0 {
+		key += " " + given[0][:1]
 	}
 	return key
 }
 
 // Person returns the key that names one person, for telling an author's
 // books apart from everyone else's (internal/authors). It is the whole
-// name, given names first, folded to ASCII and without punctuation:
-// "John le Carré", "John Le Carre" and "le Carré, John" are all
-// "john le carre", and "J.M. Barrie", "JM Barrie" and "Barrie, J. M." are
-// all "j m barrie". Suffixes ("Jr.", "Ph.D.", "MD") are dropped, and a
-// name written on both sides of the comma ("Plato, Plato", as LibraryThing
-// writes a single name) counts once. Placeholders such as "Anonymous" give
-// "".
+// name, given names first, as parseName reads it: "John le Carré", "John
+// Le Carre" and "le Carré, John" are all "john le carre", and "J.M.
+// Barrie", "JM Barrie" and "Barrie, J. M." are all "j m barrie".
+// Placeholders such as "Anonymous", and companies ("Penton Overseas,
+// Inc.", "Editors of Life Magazine"), give "": they're no one.
 //
 // Unlike Author it keeps every name, because a catalog of 100k books has
 // dozens of J. Smiths. The price is that "James Matthew Barrie" and
 // "J. M. Barrie" stay apart: telling that pair from "Min Jin Lee" and
 // "M. J. Lee", who are two people, takes more than their names.
 func Person(name string) string {
-	var parts []string
-	for _, p := range strings.Split(fold(name), ",") {
-		if !isSuffix(p) {
-			parts = append(parts, p)
-		}
-	}
-	if len(parts) == 0 || IsPlaceholderAuthor(Author(name)) {
+	if isOrganization(name) || IsPlaceholderAuthor(Author(name)) {
 		return ""
 	}
-
-	var given, family []string
-	if len(parts) == 1 {
-		names := nameWords(parts[0])
-		for len(names) > 1 && suffixes[names[len(names)-1]] {
-			names = names[:len(names)-1]
-		}
-		if len(names) == 0 {
-			return ""
-		}
-		given, family = names[:len(names)-1], names[len(names)-1:]
-	} else {
-		family, given = nameWords(parts[0]), nameWords(parts[1]) // "Last, First"
-		if slices.Equal(family, given) {
-			given = nil // "Plato, Plato"
-		}
-	}
-
+	given, family := parseName(name)
 	var key []string
 	for _, g := range given {
 		key = append(key, initials(g)...)
 	}
 	return strings.Join(append(key, family...), " ")
+}
+
+// parseName splits a credited name into given and family names, folded to
+// ASCII, for Author and Person. It reads "First Last" and "Last, First",
+// and drops what isn't the name: suffixes ("Jr.", "PhD", "USN, retired"),
+// titles ("Dr.", "Sir", "Lieutenant General"), bracketed notes ("(ed.)"),
+// and a note of someone else's part (", translated by Mark Harman"). A
+// name written on both sides of the comma ("Plato, Plato", as Reading
+// List and LibraryThing write a single name) counts once.
+func parseName(name string) (given, family []string) {
+	s := roleNote.ReplaceAllString(bracketed.ReplaceAllString(fold(name), " "), "")
+	var parts []string
+	for _, p := range strings.Split(s, ",") {
+		if len(nameWords(p)) > 0 && !isSuffix(p) {
+			parts = append(parts, p)
+		}
+	}
+	switch len(parts) {
+	case 0:
+		return nil, nil
+	case 1:
+		names := nameWords(parts[0])
+		for len(names) > 1 && suffixes[names[len(names)-1]] {
+			names = names[:len(names)-1]
+		}
+		names = dropTitles(names)
+		return names[:len(names)-1], names[len(names)-1:]
+	default: // "Last, First"; anything after a second comma isn't the name
+		family, given = nameWords(parts[0]), dropTitles(nameWords(parts[1]))
+		if slices.Equal(family, given) {
+			given = nil // "Plato, Plato"
+		}
+		return given, family
+	}
+}
+
+// dropTitles drops titles from the front of a name ("dr", "sir"), keeping
+// at least one word.
+func dropTitles(names []string) []string {
+	for len(names) > 1 && titles[names[0]] {
+		names = names[1:]
+	}
+	return names
+}
+
+// isOrganization reports whether a credit names a company or a staff
+// rather than a person: "Penton Overseas, Inc.", "Charles River Editors".
+// "Press" alone doesn't count: Eyal Press is a person.
+func isOrganization(name string) bool {
+	for _, w := range nameWords(fold(name)) {
+		if organizationWords[w] {
+			return true
+		}
+	}
+	return false
 }
 
 // LikelySamePerson reports whether two Person keys look like one name
@@ -176,11 +188,12 @@ func nameWords(s string) []string {
 }
 
 // isSuffix reports whether a part of a name between commas is only
-// suffixes: "Jr.", "M.D.", "Ph.D.", "MD/PHD".
+// suffixes or titles, and so not a name: "Jr.", "Ph.D.", "MD/PHD",
+// "Captain", "Dr." (as in "Seuss, Dr.").
 func isSuffix(part string) bool {
 	ws := strings.Fields(words(strings.ReplaceAll(part, ".", "")))
 	for _, w := range ws {
-		if !suffixes[w] {
+		if !suffixes[w] && !titles[w] {
 			return false
 		}
 	}
@@ -208,7 +221,31 @@ var (
 	aNovel    = regexp.MustCompile(`[\s:,.-]*\ba novel\s*$`)
 	nonAlnum  = regexp.MustCompile(`[^a-z0-9]+`)
 
-	suffixes = map[string]bool{"jr": true, "sr": true, "ii": true, "iii": true, "iv": true, "phd": true, "md": true}
+	// suffixes that can follow a name: generations, degrees, and a
+	// service's retired officers. "ma", "ms" and "do" are left out: Yo-Yo
+	// Ma and Anh Do.
+	suffixes = map[string]bool{
+		"jr": true, "sr": true, "ii": true, "iii": true, "iv": true, "editor": true,
+		"phd": true, "md": true, "dphil": true, "edd": true, "psyd": true, "mba": true, "rn": true, "pt": true,
+		"lcsw": true, "dds": true, "dvm": true, "usa": true, "usn": true, "usmc": true, "usaf": true, "ret": true, "retired": true,
+	}
+
+	// titles that can come before a name. "gen" and "col" are left out:
+	// both are also given names.
+	titles = map[string]bool{
+		"dr": true, "mr": true, "mrs": true, "ms": true, "sir": true, "dame": true, "lord": true, "lady": true,
+		"rev": true, "reverend": true, "prof": true, "professor": true, "major": true, "captain": true, "capt": true,
+		"colonel": true, "general": true, "admiral": true, "lieutenant": true, "lt": true, "sgt": true, "sergeant": true,
+	}
+
+	// words that mark a credit as a company or a staff, not a person.
+	organizationWords = map[string]bool{
+		"inc": true, "llc": true, "ltd": true, "corp": true, "corporation": true, "plc": true, "gmbh": true,
+		"publishing": true, "publishers": true, "editors": true, "magazine": true, "associates": true, "group": true,
+	}
+
+	// roleNote is a note, after the name, of someone else's part in the book.
+	roleNote = regexp.MustCompile(`[,;]?\s*\b(translated|edited|introduced|illustrated|adapted|abridged|retold|compiled|selected)\s+(by|and)\b.*$`)
 
 	// keys of non-people: "Anonymous" (and the French "Anonyme"), "Various",
 	// "Unknown", "Various Authors".

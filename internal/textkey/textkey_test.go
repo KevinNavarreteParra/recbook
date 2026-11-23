@@ -53,6 +53,21 @@ func TestAuthor(t *testing.T) {
 		{"Homer", "homer"},
 		{"Ursula K. Le Guin", "guin u"},
 		{"Le Guin, Ursula K.", "guin u"},
+		{"Plato, Plato", "plato"}, // how Reading List writes a single name
+		{"Barbara Oakley, PhD", "oakley b"},
+		{"Major Dick Winters", "winters d"},
+		{"Winters, Major Dick", "winters d"},
+		{"Sir Arthur Conan Doyle", "doyle a"},
+		{"Dr. Seuss", "seuss"},
+		{"Seuss, Dr.", "seuss"},
+		{"Franz Kafka, translated by Mark Harman", "kafka f"},
+		{"Dr.", ""}, // a title alone names no one
+		{"Michael Lewis (ed.)", "lewis m"},
+		{"(Jr.), Walter M. Miller", "miller w"},
+		{"Lieutenant General (Ret.) Michael T. Flynn", "flynn m"},
+		{"Colonel Cole C. Kingseed USA, (Ret.)", "kingseed c"},
+		{"L. David Marquet, Captain, USN, retired", "marquet l"},
+		{"Yo-Yo Ma", "ma y"},
 		{"", ""},
 	}
 	for _, tt := range tests {
@@ -91,8 +106,19 @@ func TestPerson(t *testing.T) {
 		{"Celeste Ng", "celeste ng"}, // a short surname is not initials
 		{"Ng, Celeste", "celeste ng"},
 		{"Flannery O'Connor", "flannery oconnor"},
+		{"Franz Kafka, translated by Mark Harman", "franz kafka"},
+		{"Edward T. Reilly Editor", "edward t reilly"},
+		{"Major Dick Winters", "dick winters"},
+		{"Homer, Homer", "homer"},
+		{"Eyal Press", "eyal press"}, // a person, though "press" ends many publishers' names
+		{"Riley Black (Brian Switek)", "riley black"},
+		{"David A Lake, PT, PhD", "david a lake"},
 		{"Anonymous", ""},
 		{"Various Authors", ""},
+		{"Penton Overseas, Inc.", ""}, // companies are no one
+		{"Innovative Language Learning, LLC", ""},
+		{"Charles River Editors", ""},
+		{"Editors of Life Magazine", ""},
 		{"", ""},
 	}
 	for _, tt := range tests {
