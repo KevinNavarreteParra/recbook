@@ -27,6 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
+	"github.com/KevinNavarreteParra/recbook/internal/graph"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 	"github.com/KevinNavarreteParra/recbook/internal/textkey"
 )
@@ -40,6 +41,8 @@ var (
 	genreSQL string
 	//go:embed genre.sql
 	genreBuildSQL string
+	//go:embed graph_neighbours.sql
+	graphSQL string
 )
 
 // PerSeed is how far down each seed's ranking fusion looks.
@@ -66,10 +69,11 @@ type View int
 const (
 	Content View = iota // their descriptions read alike (embedding cosine)
 	Genre               // the library shelves them alike (subject cosine)
+	Graph               // a walk from the seed reaches it often (internal/graph)
 )
 
 // Views are all the views, in order.
-var Views = []View{Content, Genre}
+var Views = []View{Content, Genre, Graph}
 
 func (v View) String() string {
 	switch v {
@@ -77,6 +81,8 @@ func (v View) String() string {
 		return "content"
 	case Genre:
 		return "genre"
+	case Graph:
+		return "graph"
 	}
 	return fmt.Sprintf("View(%d)", int(v))
 }
@@ -101,8 +107,10 @@ func ParseView(name string) (Blend, error) {
 		return Blend{Content: 1}, nil
 	case "genre":
 		return Blend{Genre: 1}, nil
+	case "graph":
+		return Blend{Graph: 1}, nil
 	}
-	return nil, fmt.Errorf("unknown view %q: want content, genre or blend", name)
+	return nil, fmt.Errorf("unknown view %q: want content, genre, graph or blend", name)
 }
 
 // Options are a recommendation request.
@@ -123,6 +131,13 @@ type Options struct {
 	// Languages keeps only recordings in these languages (ISO 639-1
 	// codes, "en"); nil keeps every language.
 	Languages []string
+
+	// Graph is the graph view's graph. If the blend uses the graph and
+	// this is nil, Rank loads it, which takes a few seconds; the web app
+	// and the evaluation load it once and pass it in.
+	Graph *graph.Graph
+	// GraphAlpha is the graph walk's restart probability; 0 means GraphAlpha.
+	GraphAlpha float64
 }
 
 func (o Options) blend() Blend {
@@ -159,6 +174,10 @@ func (s Seed) Has(v View) bool {
 		return s.Embedded
 	case Genre:
 		return s.Shelved
+	case Graph:
+		// Edges reach it through its subjects or its nearest texts (and its
+		// author, which every book has, but that alone says little).
+		return s.Shelved || s.Embedded
 	}
 	return false
 }
@@ -300,6 +319,13 @@ func Rank(ctx context.Context, st *store.Store, seeds []Seed, exclude []int64, o
 			if w, ok := opts.weight(s, v); ok {
 				rankings = append(rankings, Ranking{Seed: s, View: v, Weight: w})
 			}
+		}
+	}
+
+	if opts.Graph == nil && slices.ContainsFunc(rankings, func(r Ranking) bool { return r.View == Graph }) {
+		var err error
+		if opts.Graph, err = graph.Load(ctx, st, opts.Model, graph.DefaultWeights); err != nil {
+			return nil, err
 		}
 	}
 
@@ -466,8 +492,12 @@ func neighbours(ctx context.Context, db *sql.DB, v View, s Seed, exclude []int64
 		languages = []string{} // ...and a NULL list of languages would keep nothing
 	}
 	query, args := contentSQL, []any{sql.Named("seed", s.vector), sql.Named("model", opts.Model)}
-	if v == Genre {
+	switch v {
+	case Genre:
 		query, args = genreSQL, []any{sql.Named("seed", s.WorkID)}
+	case Graph:
+		ids, scores := walk(opts.Graph, s.WorkID, cmp.Or(opts.GraphAlpha, GraphAlpha))
+		query, args = graphSQL, []any{sql.Named("ids", ids), sql.Named("scores", scores)}
 	}
 	rows, err := db.QueryContext(ctx, query, append(args,
 		sql.Named("exclude", exclude),
@@ -493,4 +523,37 @@ func neighbours(ctx context.Context, db *sql.DB, v View, s Seed, exclude []int64
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// GraphAlpha is the graph walk's restart probability: how close to the seed
+// it stays. In the evaluation's one-seed protocol 0.15, 0.3 and 0.5 did
+// about equally well (hit@10 44%, 44% and 43%); 0.3 converges faster.
+const GraphAlpha = 0.3
+
+// walkDepth is how many of a walk's best works are handed to the query
+// that filters them: enough that "available now" leaves plenty.
+const walkDepth = 20000
+
+// walk ranks every work from one seed in the graph, and returns the best
+// walkDepth of them with their scores, scaled so the best is 1: a PageRank
+// is a tiny number, and only its order means anything.
+func walk(g *graph.Graph, seed int64, alpha float64) ([]int64, []float64) {
+	scores := g.Rank(map[int64]float64{seed: 1}, alpha)
+	scores = scores[:min(len(scores), walkDepth)]
+	ids := make([]int64, 0, len(scores))
+	out := make([]float64, 0, len(scores))
+	for _, s := range scores {
+		if s.WorkID == seed {
+			continue // the walk starts there, so it's always first
+		}
+		ids = append(ids, s.WorkID)
+		out = append(out, s.Score)
+	}
+	if len(out) > 0 {
+		top := out[0]
+		for i := range out {
+			out[i] /= top
+		}
+	}
+	return ids, out
 }

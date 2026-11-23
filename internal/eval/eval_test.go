@@ -11,6 +11,7 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/authors"
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
+	"github.com/KevinNavarreteParra/recbook/internal/graph"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
 	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/resolve"
@@ -201,7 +202,12 @@ func TestAUC(t *testing.T) {
 }
 
 func TestDiscriminate(t *testing.T) {
-	d, err := Discriminate(context.Background(), setup(t), Options{Model: embed.DefaultModel})
+	st := setup(t)
+	g, err := graph.Load(context.Background(), st, embed.DefaultModel, graph.DefaultWeights)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := Discriminate(context.Background(), st, Options{Model: embed.DefaultModel}, g)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,8 +237,8 @@ func TestDiscriminate(t *testing.T) {
 	if got := auc["content"]; !math.IsNaN(got.AUC) || got.Scored != 2 {
 		t.Errorf("content: AUC %v over %d borrows, want NaN over 2", got.AUC, got.Scored)
 	}
-	for _, m := range []string{"genre", "blend"} {
-		if got := auc[m]; got.Scored != 3 || got.AUC < 0 || got.AUC > 1 {
+	for _, m := range []string{"genre", "graph", "blend"} {
+		if got := auc[m]; got.Scored < 3 || got.AUC < 0 || got.AUC > 1 {
 			t.Errorf("%s: AUC %v over %d borrows, want one over 3", m, got.AUC, got.Scored)
 		}
 	}

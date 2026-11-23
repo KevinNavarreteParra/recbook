@@ -10,7 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/KevinNavarreteParra/recbook/internal/embed"
+	"github.com/KevinNavarreteParra/recbook/internal/graph"
 	"github.com/KevinNavarreteParra/recbook/internal/nightly"
+	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/sources/overdrive"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
@@ -31,7 +34,9 @@ func newNightlyCmd(g *globals) *cobra.Command {
 			"  2. look up descriptions for finished books that have none (`recbook enrich`)\n" +
 			"  3. rebuild the derived tables, folding in the web app's tracker marks\n" +
 			"  4. embed whatever isn't embedded yet, on the GPU, if it's free\n" +
-			"  5. publish the result for the web app\n\n" +
+			"  5. if it embedded anything, find each book's nearest books again for the\n" +
+			"     graph view (`recbook neighbours`, on the CPU)\n" +
+			"  6. publish the result for the web app\n\n" +
 			"A failed refresh or enrich is reported and the night goes on.\n" +
 			"Every step saves as it goes, so whatever a night doesn't finish, the next\n" +
 			"night continues. Outside the window it does nothing. A systemd timer runs\n" +
@@ -65,7 +70,7 @@ func newNightlyCmd(g *globals) *cobra.Command {
 				}
 				return nil
 			}
-			crawled := false
+			crawled, embedded := false, 0
 			steps := []struct {
 				name string
 				run  func() error
@@ -82,7 +87,12 @@ func newNightlyCmd(g *globals) *cobra.Command {
 				}},
 				{"enrich", func() error { return goOn("enrich", enrichSeeds(ctx, st, out)) }},
 				{"build", func() error { return build(ctx, st, g, io.Discard) }},
-				{"embed", func() error { _, err := embedWorks(ctx, st, g.languages(), emb, out); return err }},
+				{"embed", func() error {
+					rep, err := embedWorks(ctx, st, g.languages(), emb, out)
+					embedded = rep.Embedded
+					return err
+				}},
+				{"neighbours", func() error { return neighboursIfDue(ctx, st, g, embedded, out) }},
 			}
 			// Whatever happens, publish what was done for the web app. The
 			// window may have closed, so this gets a little time of its own.
@@ -112,6 +122,26 @@ func newNightlyCmd(g *globals) *cobra.Command {
 	cmd.Flags().DurationVar(&crawlEvery, "crawl-every", 7*24*time.Hour, "how old the last full crawl may get")
 	addEmbedFlags(cmd, &emb)
 	return cmd
+}
+
+// neighboursIfDue rebuilds the graph's nearest-text edges, and the for-you
+// list that may use them, when the night embedded anything, or when they
+// were never built.
+func neighboursIfDue(ctx context.Context, st *store.Store, g *globals, embedded int, out io.Writer) error {
+	var built bool
+	err := st.DB().QueryRowContext(ctx,
+		`SELECT count(*) > 0 FROM duckdb_tables() WHERE table_name = 'text_neighbour'`).Scan(&built)
+	if err != nil {
+		return err
+	}
+	if built && embedded == 0 {
+		return nil
+	}
+	fmt.Fprintln(out, "nightly: finding each book's nearest books")
+	if err := graph.BuildNeighbours(ctx, st, embed.DefaultModel); err != nil {
+		return err
+	}
+	return recommend.BuildForYou(ctx, st, g.languages())
 }
 
 // crawlIfDue runs a crawl when the last finished one is older than every

@@ -18,8 +18,8 @@ import (
 
 func newEvalCmd(g *globals) *cobra.Command {
 	var (
-		opts        eval.Options
-		genreWeight float64
+		opts                     eval.Options
+		genreWeight, graphWeight float64
 	)
 	cmd := &cobra.Command{
 		Use:   "eval",
@@ -27,7 +27,7 @@ func newEvalCmd(g *globals) *cobra.Command {
 		Long: "Hold out each finished book the library lends, as if I hadn't read it,\n" +
 			"and see where recommendations rank it: from every other finished book at\n" +
 			"once (history), and from the best single one of them (one seed). The\n" +
-			"content and genre views, alone and blended, and the for-you list\n" +
+			"content, genre and graph views, alone and blended, and the for-you list\n" +
 			"(history only) are compared with two\n" +
 			"baselines (books by authors I've finished; books on the shelves I read\n" +
 			"most from) and with chance.\n\n" +
@@ -47,7 +47,7 @@ func newEvalCmd(g *globals) *cobra.Command {
 			defer st.Close()
 
 			fmt.Fprintln(cmd.ErrOrStderr(), "ranking the catalog against every finished book; this takes a few minutes")
-			opts.Blend = recommend.Blend{recommend.Content: 1, recommend.Genre: genreWeight}
+			opts.Blend = recommend.Blend{recommend.Content: 1, recommend.Genre: genreWeight, recommend.Graph: graphWeight}
 			rep, err := eval.Run(cmd.Context(), st, opts)
 			if err != nil {
 				return err
@@ -110,6 +110,10 @@ func newEvalCmd(g *globals) *cobra.Command {
 	}
 	cmd.Flags().Float64Var(&genreWeight, "genre-weight", recommend.DefaultBlend[recommend.Genre],
 		"the blend's weight for genre, with content at 1")
+	cmd.Flags().Float64Var(&graphWeight, "graph-weight", recommend.DefaultBlend[recommend.Graph],
+		"the blend's weight for graph, with content at 1")
+	cmd.Flags().Float64Var(&opts.GraphAlpha, "graph-alpha", recommend.GraphAlpha,
+		"the graph walk's restart probability: higher stays nearer the seed")
 	cmd.Flags().BoolVar(&opts.Unweighted, "unweighted", false, "count every seed equally")
 	cmd.Flags().Float64Var(&opts.Diversity, "diversity", recommend.DefaultDiversity, "trade closeness for variety, 0..1, as in similar")
 	cmd.Flags().IntVar(&opts.PerAuthor, "per-author", 3, "at most this many results by one author, as in similar (0 for no cap)")

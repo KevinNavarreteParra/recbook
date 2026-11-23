@@ -41,6 +41,7 @@ go run ./cmd/recbook crawl --library lasvegas        # the key in libbyapp.com/l
 go run ./cmd/recbook enrich                          # describe finished books no source describes
 go run ./cmd/recbook build
 go run ./cmd/recbook embed                           # on the GPU; the nightly job keeps it current
+go run ./cmd/recbook neighbours                      # each book's nearest books, for the graph (minutes)
 
 go run ./cmd/recbook search cold war berlin --available-now
 go run ./cmd/recbook similar --seed "tinker tailor" --seed "red october" --max-wait 14
@@ -107,6 +108,15 @@ genre at 0.75 of content, is the weight `eval` liked best. `--diversity`
 then reorders the top 100 by maximal marginal relevance, trading closeness
 to the seeds for distance from what's already listed; `eval --diversity`
 measures what that costs.
+
+The graph view ([internal/graph](internal/graph)) joins works to their
+authors, series, subjects and narrators, and to each book's 15 nearest
+books in the content view, and ranks books by personalized PageRank: a
+walk from the seed that keeps restarting there. Asked with one seed, it
+ranks held-out books best of the views (hit@10 44% against the blend's
+36%), and without the nearest-book edges it falls to 36%. Finding those
+edges compares every book with every other, several minutes on every
+core, so only the nightly job (or `recbook neighbours`) does it.
 
 `foryou` recommends from every book I've finished at once. Fusing four
 hundred seeds by reciprocal rank rewards breadth: the top fills with
@@ -177,6 +187,7 @@ and lists every problem.
 | `enrich` | descriptions from Google Books and Open Library for finished books |
 | `polite` | the rate-limited, retrying HTTP client every online source uses |
 | `blurb`, `embed`, `ollama` | clean descriptions, embed them, run the local model |
+| `graph` | the graph view: works, authors, series, subjects, narrators and nearest books, walked by personalized PageRank |
 | `nightly` | the night window and GPU guard |
 | `web` | the web app and its tracker |
 | `demo` | synthetic data for tests and `recbook demo` |

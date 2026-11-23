@@ -5,8 +5,13 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"maps"
+	"runtime"
 	"slices"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/KevinNavarreteParra/recbook/internal/graph"
 	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
@@ -18,16 +23,18 @@ var borrowsSQL string
 // order they're reported, which is also the order of the by* columns.
 // "shorter" isn't a likeness: it's there to show how much of finishing a
 // borrow is just its length.
-var BorrowMethods = []string{"content", "genre", "same author", "same shelf", "shorter", "blend"}
+var BorrowMethods = []string{"content", "genre", "same author", "same shelf", "shorter", "graph", "blend"}
 
-// The score columns. borrows.sql returns all but the blend, which is made
-// from content and genre.
+// The score columns. borrows.sql returns the first five; graph is each
+// borrow's PageRank from the finished books, and blend is made from the
+// views.
 const (
 	byContent = iota
 	byGenre
 	byAuthor
 	byShelf
 	byLength
+	byGraph
 	byBlend
 )
 
@@ -53,13 +60,58 @@ type BorrowScore struct {
 // borrow is one labeled borrow and its score by each of BorrowMethods
 // (NULL where the method can't score it).
 type borrow struct {
+	workID   int64
 	finished bool
 	scores   []sql.NullFloat64
 }
 
+// graphScores fills in each borrow's graph score: its PageRank in a walk
+// from every finished book but itself, weighted by tier as seeds are.
+func graphScores(ctx context.Context, st *store.Store, g *graph.Graph, borrows []borrow, opts Options) error {
+	finished, _, err := loadFinished(ctx, st, opts.Model)
+	if err != nil {
+		return err
+	}
+	seeds, err := recommend.LoadSeeds(ctx, st, opts.Model, finished)
+	if err != nil {
+		return err
+	}
+	weight := map[int64]float64{}
+	for _, s := range seeds {
+		weight[s.WorkID] = s.Weight
+		if opts.Unweighted {
+			weight[s.WorkID] = 1
+		}
+	}
+	alpha := cmp.Or(opts.GraphAlpha, recommend.GraphAlpha)
+
+	var group errgroup.Group
+	group.SetLimit(runtime.GOMAXPROCS(0))
+	for i := range borrows {
+		b := &borrows[i]
+		if !g.Has(b.workID) {
+			continue // no edges: the graph can't score it
+		}
+		group.Go(func() error {
+			from := maps.Clone(weight)
+			delete(from, b.workID)                           // held out
+			b.scores[byGraph] = sql.NullFloat64{Valid: true} // 0 if no walk reaches it
+			for _, s := range g.Rank(from, alpha) {
+				if s.WorkID == b.workID {
+					b.scores[byGraph] = sql.NullFloat64{Float64: s.Score, Valid: true}
+					break
+				}
+			}
+			return nil
+		})
+	}
+	return group.Wait()
+}
+
 // Discriminate scores each borrow I finished or gave up on by each method,
-// and how well the scores separate the two.
-func Discriminate(ctx context.Context, st *store.Store, opts Options) (*Discrimination, error) {
+// and how well the scores separate the two. g is the graph view's graph;
+// with nil, the graph scores nothing.
+func Discriminate(ctx context.Context, st *store.Store, opts Options, g *graph.Graph) (*Discrimination, error) {
 	rows, err := st.DB().QueryContext(ctx, borrowsSQL,
 		sql.Named("model", opts.Model), sql.Named("unweighted", opts.Unweighted))
 	if err != nil {
@@ -70,11 +122,10 @@ func Discriminate(ctx context.Context, st *store.Store, opts Options) (*Discrimi
 	d := &Discrimination{}
 	var borrows []borrow
 	for rows.Next() {
-		var id int64
 		var confidence string
 		b := borrow{scores: make([]sql.NullFloat64, len(BorrowMethods))}
-		columns := []any{&id, &b.finished, &confidence}
-		for i := range byBlend {
+		columns := []any{&b.workID, &b.finished, &confidence}
+		for i := range byGraph {
 			columns = append(columns, &b.scores[i])
 		}
 		if err := rows.Scan(columns...); err != nil {
@@ -95,11 +146,18 @@ func Discriminate(ctx context.Context, st *store.Store, opts Options) (*Discrimi
 		return nil, err
 	}
 
+	if g != nil {
+		if err := graphScores(ctx, st, g, borrows, opts); err != nil {
+			return nil, err
+		}
+	}
 	blend := opts.Blend
 	if blend == nil {
 		blend = recommend.DefaultBlend
 	}
-	blendScores(borrows, map[int]float64{byContent: blend[recommend.Content], byGenre: blend[recommend.Genre]}, byBlend)
+	blendScores(borrows, map[int]float64{
+		byContent: blend[recommend.Content], byGenre: blend[recommend.Genre], byGraph: blend[recommend.Graph],
+	}, byBlend)
 
 	for i, m := range BorrowMethods {
 		var scores []float64

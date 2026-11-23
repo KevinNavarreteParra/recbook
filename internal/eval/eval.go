@@ -13,7 +13,7 @@
 //     and the held-out book gets the best rank any of them gives it. This
 //     is query by example, with the best query I could have made.
 //
-// The views (content, genre, and the blend of both) are ranked by the real
+// The views (content, genre, graph, and their blend) are ranked by the real
 // recommend code, and under history so is the "for you" list, which
 // groups the seeds by taste before fusing (recommend.ForYou). Two
 // baselines and chance rank the same books from the same pool
@@ -36,6 +36,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
+	"github.com/KevinNavarreteParra/recbook/internal/graph"
 	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
@@ -52,7 +53,7 @@ var (
 // it would be the blend.
 var (
 	Protocols = []string{"history", "one seed"}
-	Methods   = []string{"content", "genre", "blend", "for you", "same author", "same shelf", "random"}
+	Methods   = []string{"content", "genre", "graph", "blend", "for you", "same author", "same shelf", "random"}
 )
 
 // Cutoffs are the list lengths hit rates are reported at. The CLI shows 20
@@ -69,6 +70,9 @@ type Options struct {
 	// GroupThreshold is how alike seeds must be to share a group in the
 	// "for you" method; 0 means recommend.GroupThreshold.
 	GroupThreshold float64
+	// GraphAlpha is the graph walk's restart probability; 0 means
+	// recommend.GraphAlpha.
+	GraphAlpha float64
 	// MaxRank is how deep the history protocol looks; a book ranked below
 	// it counts as missed. 0 means 1000. The one-seed protocol looks as
 	// deep as a seed's ranking goes, recommend.PerSeed.
@@ -185,8 +189,12 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 		return nil, fmt.Errorf("no finished book has a borrowable, embedded recording to hold out (have build and embed run?)")
 	}
 
+	g, err := graph.Load(ctx, st, opts.Model, graph.DefaultWeights)
+	if err != nil {
+		return nil, err
+	}
 	results := outcomes{}
-	seeds, err := rankViews(ctx, st, finished, targets, opts, results)
+	seeds, err := rankViews(ctx, st, finished, targets, opts, g, results)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +203,7 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 		return nil, err
 	}
 
-	borrows, err := Discriminate(ctx, st, opts)
+	borrows, err := Discriminate(ctx, st, opts, g)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +258,7 @@ func loadFinished(ctx context.Context, st *store.Store, model string) ([]int64, 
 // would never return) recommend.PerSeed remain. Then, for each method and
 // target, it weighs and fuses those rankings exactly as recommend.Similar
 // would if that one book were unread.
-func rankViews(ctx context.Context, st *store.Store, finished []int64, targets []Target, opts Options, results outcomes) (int, error) {
+func rankViews(ctx context.Context, st *store.Store, finished []int64, targets []Target, opts Options, g *graph.Graph, results outcomes) (int, error) {
 	seeds, err := recommend.LoadSeeds(ctx, st, opts.Model, finished)
 	if err != nil {
 		return 0, err
@@ -259,7 +267,8 @@ func rankViews(ctx context.Context, st *store.Store, finished []int64, targets [
 	for _, v := range recommend.Views {
 		every[v] = 1
 	}
-	rankOpts := recommend.Options{Views: every, Model: opts.Model, IncludeRead: true, MaxWaitDays: -1}
+	rankOpts := recommend.Options{Views: every, Model: opts.Model, IncludeRead: true, MaxWaitDays: -1,
+		Graph: g, GraphAlpha: opts.GraphAlpha}
 	rankings, err := recommend.Rank(ctx, st, seeds, nil, rankOpts, recommend.PerSeed+len(finished))
 	if err != nil {
 		return 0, err
@@ -279,10 +288,11 @@ func rankViews(ctx context.Context, st *store.Store, finished []int64, targets [
 	}
 	content, _ := recommend.ParseView("content")
 	genre, _ := recommend.ParseView("genre")
+	walked, _ := recommend.ParseView("graph") // not "graph", which names the package
 	for _, m := range []struct {
 		method string
 		blend  recommend.Blend
-	}{{"content", content}, {"genre", genre}, {"blend", opts.Blend}} {
+	}{{"content", content}, {"genre", genre}, {"graph", walked}, {"blend", opts.Blend}} {
 		weighed := recommend.Weigh(rankings, recommend.Options{Views: m.blend, Unweighted: opts.Unweighted})
 		results.set("history", m.method, f.history(weighed))
 		results.set("one seed", m.method, f.oneSeed(weighed))

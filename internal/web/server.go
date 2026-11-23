@@ -20,6 +20,9 @@ import (
 	"sync"
 	"time"
 
+	vectors "github.com/KevinNavarreteParra/recbook/internal/embed"
+	"github.com/KevinNavarreteParra/recbook/internal/graph"
+	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
@@ -56,6 +59,10 @@ type Server struct {
 	mu    sync.RWMutex // guards st and stamp; requests hold it for reading
 	st    *store.Store
 	stamp time.Time // modification time of the copy st has open
+
+	graphMu    sync.Mutex   // guards graph and graphStamp
+	graph      *graph.Graph // the graph view of the copy published at graphStamp
+	graphStamp time.Time
 }
 
 // New opens the published copy and the tracker file. Search,
@@ -152,6 +159,26 @@ func (s *Server) currentStamp() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.stamp
+}
+
+// graphOf returns the graph view of the open copy st, for recommendations
+// whose blend uses it, loading it the first time a request needs it (a few
+// seconds) and keeping it until a newer copy is published. It's nil if the
+// default blend doesn't use the graph. The caller holds s.mu for reading.
+func (s *Server) graphOf(ctx context.Context, st *store.Store) (*graph.Graph, error) {
+	if recommend.DefaultBlend[recommend.Graph] == 0 {
+		return nil, nil
+	}
+	s.graphMu.Lock()
+	defer s.graphMu.Unlock()
+	if s.graph == nil || !s.graphStamp.Equal(s.stamp) {
+		g, err := graph.Load(ctx, st, vectors.DefaultModel, graph.DefaultWeights)
+		if err != nil {
+			return nil, err
+		}
+		s.graph, s.graphStamp = g, s.stamp
+	}
+	return s.graph, nil
 }
 
 // store returns the open copy and a func to call when done with it.

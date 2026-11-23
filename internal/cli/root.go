@@ -60,6 +60,7 @@ func newRootCmd() *cobra.Command {
 		newSuiteCmd(g),
 		newServeCmd(g),
 		newEmbedCmd(g),
+		newNeighboursCmd(g),
 		newNightlyCmd(g),
 		newStatusCmd(g),
 		newDemoCmd(g),
