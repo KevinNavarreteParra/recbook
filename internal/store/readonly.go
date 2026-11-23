@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 // OpenReadOnly opens a published copy of the database (see Snapshot) for
@@ -13,11 +14,20 @@ import (
 // full-text search extension is loaded, queries can no longer read files,
 // fetch URLs or load extensions, and that setting can't be undone. A bug
 // in a query then can't reach anything outside the database.
+//
+// It opens the copy through a hard link of its own, removed once the copy
+// is open (an open file stays readable without a name). The DuckDB driver
+// keeps one database per path in a process and hands it to the next open
+// of that path, so opening the published path again while the last copy
+// is open, as the web app does when a newer one replaces it, would get the
+// last copy back, with its settings already locked.
 func OpenReadOnly(ctx context.Context, path string) (*Store, error) {
-	if _, err := os.Stat(path); err != nil {
+	link := fmt.Sprintf("%s.%d", path, time.Now().UnixNano())
+	if err := os.Link(path, link); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("duckdb", path+"?access_mode=READ_ONLY")
+	defer os.Remove(link)
+	db, err := sql.Open("duckdb", link+"?access_mode=READ_ONLY")
 	if err != nil {
 		return nil, err
 	}

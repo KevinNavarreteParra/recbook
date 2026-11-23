@@ -253,3 +253,48 @@ func TestSnapshotAndOpenReadOnly(t *testing.T) {
 		t.Error("the lockdown must not be reversible")
 	}
 }
+
+// A reader that opens each new copy while the last is still open, as the
+// web app does, gets the new copy, not the one it already has.
+func TestOpenReadOnlyAgain(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, err := Open(ctx, filepath.Join(dir, "live.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	copyPath := filepath.Join(dir, "serve.duckdb")
+	if _, err := s.DB().Exec(`CREATE TABLE note AS SELECT 'first' AS text`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Snapshot(ctx, copyPath); err != nil {
+		t.Fatal(err)
+	}
+	first, err := OpenReadOnly(ctx, copyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+
+	if _, err := s.DB().Exec(`INSERT INTO note VALUES ('second')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Snapshot(ctx, copyPath); err != nil {
+		t.Fatal(err)
+	}
+	second, err := OpenReadOnly(ctx, copyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	if got := count(t, second, `SELECT count(*) FROM note`); got != 2 {
+		t.Errorf("the second open should read the new copy; rows = %d", got)
+	}
+	if got := count(t, first, `SELECT count(*) FROM note`); got != 1 {
+		t.Errorf("the first should still read its own copy; rows = %d", got)
+	}
+	if links, _ := filepath.Glob(copyPath + ".*"); len(links) > 0 {
+		t.Errorf("opening should leave nothing behind: %q", links)
+	}
+}
