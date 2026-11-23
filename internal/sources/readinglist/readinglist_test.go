@@ -22,7 +22,7 @@ func TestRead(t *testing.T) {
 	if err := shelf.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if len(shelf.Items) != 5 {
+	if len(shelf.Items) != 6 {
 		t.Fatalf("got %d items", len(shelf.Items))
 	}
 
@@ -37,6 +37,11 @@ func TestRead(t *testing.T) {
 	if got := shelf.Items[2].Subjects; !slices.Equal(got, []string{"Odd; Subject", "Second"}) {
 		t.Errorf(`escaped "\;" should stay inside one subject: %q`, got)
 	}
+	// Names the app split at their last space are put back together.
+	want := []string{"Steinbeck, John", "Wallace, David Foster", "Nick Harkaway", "Nicholas Cornwell"}
+	if got := shelf.Items[5].Authors; !slices.Equal(got, want) {
+		t.Errorf("split names = %q, want %q", got, want)
+	}
 	if len(shelf.Items[3].ISBNs) != 0 {
 		t.Error("an invalid ISBN should be dropped, not passed on")
 	}
@@ -45,7 +50,7 @@ func TestRead(t *testing.T) {
 	for _, ev := range shelf.Events {
 		kinds = append(kinds, ev.ItemID+" "+string(ev.Kind)+" "+ev.On.String())
 	}
-	want := []string{
+	want = []string{
 		"AAAA-1 started 2023-01-02", "AAAA-1 finished 2023-01-20",
 		// No dates at all: on the to-read list.
 		"AAAA-2 wanted ",
@@ -55,6 +60,7 @@ func TestRead(t *testing.T) {
 		"AAAA-4 started 2026-10-01",
 		// Did not finish, with no finish date.
 		"AAAA-5 started 2025-03-01", "AAAA-5 abandoned ",
+		"AAAA-6 wanted ",
 	}
 	if !slices.Equal(kinds, want) {
 		t.Errorf("events =\n  %q\nwant\n  %q", kinds, want)

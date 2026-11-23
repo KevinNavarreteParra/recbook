@@ -13,6 +13,8 @@
 //     "date added" column, so those wanted events are undated, and a book's
 //     to-read history is lost once it is started.
 //   - No format: the same app logs print books and audiobooks.
+//   - Authors as "Last, First", except where the app split a whole
+//     "Surname, Given" string at its last space (see splitAuthors).
 //
 // Ratings, notes, lists and the "Paused" date are not carried over.
 package readinglist
@@ -58,7 +60,7 @@ func Read(r io.Reader) (*contract.Shelf, error) {
 			ID:          get("Reading List ID"),
 			Title:       get("Title"),
 			Subtitle:    get("Subtitle"),
-			Authors:     splitList(get("Authors")),
+			Authors:     splitAuthors(get("Authors")),
 			Format:      contract.UnknownFormat,
 			Description: get("Description"),
 			Subjects:    splitList(get("Subjects")),
@@ -159,6 +161,31 @@ func splitList(s string) []string {
 	for _, part := range strings.Split(s, ";") {
 		if part = strings.TrimSpace(strings.ReplaceAll(part, placeholder, ";")); part != "" {
 			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// splitAuthors splits the Authors field into names, each "Last, First".
+// Given a whole name as one "Surname, Given" string, Reading List splits it
+// at the last space instead: "Steinbeck, John" gets the last name "John"
+// and the first names "Steinbeck,", exported as "John, Steinbeck\," with
+// the comma escaped. An escaped comma, or a semicolon left inside one name,
+// gives these away, and they're put back together; a semicolon then
+// separates two names ("Nick Harkaway; Nicholas Cornwell").
+func splitAuthors(s string) []string {
+	var out []string
+	for _, name := range splitList(s) {
+		last, first, ok := strings.Cut(name, ", ")
+		if !ok || (!strings.Contains(first, `\,`) && !strings.Contains(first, ";")) {
+			out = append(out, name)
+			continue
+		}
+		whole := strings.TrimSpace(strings.ReplaceAll(first, `\,`, ",") + " " + last)
+		for _, part := range strings.Split(whole, ";") {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
 		}
 	}
 	return out
