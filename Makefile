@@ -11,8 +11,11 @@ test:
 fmt:
 	gofmt -w .
 
+# gofmt checks the packages' directories, as vet and test do, so the
+# worktrees under .claude/ (other branches' files) don't count.
 check:
-	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
+	@test -z "$$(gofmt -l $$(go list -f '{{.Dir}}' ./...))" || \
+		(echo "gofmt needed:"; gofmt -l $$(go list -f '{{.Dir}}' ./...); exit 1)
 	go vet ./...
 	go test ./...
 
