@@ -1,7 +1,7 @@
 -- match_edge: pairs of records that look like the same work, and why.
 -- Edges are undirected and stored once, with a < b. All of them are
 -- accepted unless match_overrides.csv says otherwise; the weak kinds
--- (main_title, fuzzy) are also written to the review file.
+-- (spelling, main_title, fuzzy) are also written to the review file.
 CREATE OR REPLACE TABLE match_edge AS
 WITH r AS (
     SELECT * FROM record JOIN record_key USING (ref)
@@ -35,6 +35,21 @@ edges AS (
     SELECT a.ref, b.ref, 'title', 1.0
     FROM r a JOIN r b ON a.title_key = b.title_key AND a.author_key = b.author_key AND a.ref < b.ref
     WHERE a.title_key <> '' AND a.author_key <> ''
+
+    UNION ALL
+    -- The same title by an author spelt a letter differently, as
+    -- transliterations are: "Dostoyevsky" and "Dostoevsky". The initials
+    -- must agree, and the surnames be six letters or more and one letter
+    -- apart: "Clark" and "Clarke", or "Patterson" and "Peterson", are two
+    -- people. An exact title can't chain a series together, so this runs
+    -- on the catalog too.
+    SELECT a.ref, b.ref, 'spelling', 0.9
+    FROM r a JOIN r b ON a.title_key = b.title_key AND a.ref < b.ref
+    WHERE a.title_key <> '' AND a.author_key <> '' AND b.author_key <> ''
+      AND a.author_key <> b.author_key
+      AND split_part(a.author_key, ' ', 2) = split_part(b.author_key, ' ', 2)
+      AND least(length(split_part(a.author_key, ' ', 1)), length(split_part(b.author_key, ' ', 1))) >= 6
+      AND levenshtein(split_part(a.author_key, ' ', 1), split_part(b.author_key, ' ', 1)) = 1
 
     UNION ALL
     -- The same main title and author, where one side has no subtitle:

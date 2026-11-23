@@ -25,7 +25,7 @@ SELECT e.method AS reason, round(e.score, 3) AS score,
 FROM match_edge e
 JOIN record ra ON ra.ref = e.a
 JOIN record rb ON rb.ref = e.b
-WHERE e.method IN ('main_title', 'fuzzy')
+WHERE e.method IN ('spelling', 'main_title', 'fuzzy')
 UNION ALL
 SELECT 'mixed_work', count(DISTINCT k.main_key),
        min(w.ref), string_agg(DISTINCT r.title, ' | '), NULL,

@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/KevinNavarreteParra/recbook/internal/contract"
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
@@ -89,6 +91,54 @@ func TestRunMatchesTheDemo(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "main_title") || !strings.Contains(string(body), "Ethics") {
 		t.Errorf("review file should list the main-title matches:\n%s", body)
+	}
+}
+
+// Credits written in ways that hid a match: a transliteration, a single
+// name written twice, a degree after the name, an edition note in the
+// title. And two people a letter or two apart who must stay apart.
+func TestRunMatchesNamesWrittenDifferently(t *testing.T) {
+	st := demoStore(t)
+	ctx := context.Background()
+	shelf := &contract.Shelf{Items: []contract.ShelfItem{
+		{ID: "odyssey", Title: "The Odyssey", Authors: []string{"Homer, Homer"}, Format: contract.UnknownFormat},
+		{ID: "numbers", Title: "A Mind for Numbers", Authors: []string{"Oakley, Barbara"}, Format: contract.UnknownFormat},
+		{ID: "whatif", Title: "What If?", Authors: []string{"Randall Munroe"}, Format: contract.UnknownFormat},
+	}}
+	if err := st.ReplaceShelf(ctx, "app", "test", shelf); err != nil {
+		t.Fatal(err)
+	}
+	by := func(name string) []contract.Creator { return []contract.Creator{{Name: name, Role: contract.Author}} }
+	titles := []contract.CatalogTitle{
+		{ID: "1", Title: "Crime and Punishment", Creators: by("Fyodor Dostoyevsky")},
+		{ID: "2", Title: "The Odyssey", Creators: by("Homer")},
+		{ID: "3", Title: "A Mind for Numbers", Creators: by("Barbara Oakley, PhD")},
+		{ID: "4", Title: "What If? 10th Anniversary Edition", Creators: by("Randall Munroe")},
+		{ID: "5", Title: "Conviction", Creators: by("Richard North Patterson")},
+		{ID: "6", Title: "Conviction", Creators: by("Robert Peterson")},
+	}
+	for i := range titles {
+		titles[i].Format, titles[i].Language = contract.Audiobook, "en"
+	}
+	if err := st.SaveCatalog(ctx, "extra", titles, nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(ctx, st, Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, refs := range [][]string{
+		{"reading_app:ra-6", "catalog:extra:1"}, // Dostoevsky, Dostoyevsky
+		{"app:odyssey", "catalog:extra:2"},
+		{"app:numbers", "catalog:extra:3"},
+		{"app:whatif", "catalog:extra:4"},
+	} {
+		if !sameWork(t, st, refs...) {
+			t.Errorf("%v should be one work", refs)
+		}
+	}
+	if sameWork(t, st, "catalog:extra:5", "catalog:extra:6") {
+		t.Error("Patterson and Peterson are two people")
 	}
 }
 
