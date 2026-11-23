@@ -26,7 +26,7 @@ func newSuiteCmd(g *globals) *cobra.Command {
 			"check its results against what the file expects of them, and list the\n" +
 			"books that entered or left its results since the last run, which is kept\n" +
 			"in <data dir>/review/suite.txt. Run it before and after a change to the\n" +
-			"ranking. A query is a similar or author command line; an author query's\n" +
+			"ranking. A query is a similar, foryou or author command line; an author query's\n" +
 			"results are its similar authors' books. The file's format is described in\n" +
 			"internal/suite. Exits non-zero if any check fails.",
 		Args: cobra.NoArgs,
@@ -130,8 +130,22 @@ func runSaved(ctx context.Context, st *store.Store, q suite.Query, languages []s
 				books = append(books, suite.Book{WorkID: b.WorkID, Title: b.Title, Author: n.Name})
 			}
 		}
+	case "foryou":
+		var fq forYouQuery
+		fq.flags(flags)
+		if err := flags.Parse(q.Args[1:]); err != nil {
+			return nil, err
+		}
+		fq.opts.Limit = max(fq.opts.Limit, q.Depth())
+		recs, _, err := fq.run(ctx, st, languages)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range recs {
+			books = append(books, suite.Book{WorkID: r.WorkID, Title: r.Title, Author: r.Author})
+		}
 	default:
-		return nil, fmt.Errorf("the suite runs similar and author queries, not %q", q.Args[0])
+		return nil, fmt.Errorf("the suite runs similar, foryou and author queries, not %q", q.Args[0])
 	}
 	return books[:min(len(books), q.Depth())], nil
 }

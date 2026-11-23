@@ -182,6 +182,8 @@ type Rec struct {
 	Like       string  // the seed it's most similar to: the "why"
 	Similarity float64 // ...and how similar, as a cosine
 	View       View    // ...in this view: content if any seed's content ranking found it
+
+	Group int // in a "for you" list, the group of seeds whose turn it filled (see Interleave)
 }
 
 // SimilarityText is the similarity to the closest seed, for showing:

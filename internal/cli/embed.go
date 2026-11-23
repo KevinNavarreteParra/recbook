@@ -15,6 +15,7 @@ import (
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/nightly"
 	"github.com/KevinNavarreteParra/recbook/internal/ollama"
+	"github.com/KevinNavarreteParra/recbook/internal/recommend"
 	"github.com/KevinNavarreteParra/recbook/internal/store"
 )
 
@@ -138,8 +139,12 @@ func embedWorks(ctx context.Context, st *store.Store, languages []string, opts e
 	}
 	if rep.Embedded > 0 {
 		// The nightly job builds before it embeds, so without this new
-		// books would reach their authors' vectors only a night later.
+		// books would reach their authors' vectors and the "for you" list
+		// only a night later.
 		if err := authors.BuildVectors(ctx, st); err != nil {
+			return rep, err
+		}
+		if err := recommend.BuildForYou(ctx, st, languages); err != nil {
 			return rep, err
 		}
 	}

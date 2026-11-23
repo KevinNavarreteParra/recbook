@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KevinNavarreteParra/recbook/internal/authors"
 	"github.com/KevinNavarreteParra/recbook/internal/demo"
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/library"
@@ -100,6 +101,9 @@ func setup(t *testing.T) *store.Store {
 	if _, err := embed.Run(ctx, st, demo.ThemeEmbedder{}, embed.Options{}); err != nil {
 		t.Fatal(err)
 	}
+	if err := authors.Build(ctx, st); err != nil { // and the mean vector, content_mean
+		t.Fatal(err)
+	}
 	return st
 }
 
@@ -121,8 +125,8 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rep.Results) != len(Protocols)*len(Methods) {
-		t.Fatalf("%d results, want one per protocol and method", len(rep.Results))
+	if len(rep.Results) != len(Protocols)*len(Methods)-1 {
+		t.Fatalf("%d results, want one per protocol and method, less one seed's for you", len(rep.Results))
 	}
 
 	// The theme embedder puts the three le Carré spy novels side by side,
@@ -170,8 +174,8 @@ func TestRunDiversified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rep.Results) != len(Protocols)*len(Methods) {
-		t.Fatalf("%d results, want one per protocol and method", len(rep.Results))
+	if len(rep.Results) != len(Protocols)*len(Methods)-1 {
+		t.Fatalf("%d results, want one per protocol and method, less one seed's for you", len(rep.Results))
 	}
 }
 

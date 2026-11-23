@@ -48,6 +48,7 @@ go run ./cmd/recbook similar --seed "tinker tailor" --view genre   # or content;
 go run ./cmd/recbook similar --seed "tinker tailor" --diversity 0.3 # range wider (MMR)
 go run ./cmd/recbook backlog --available-now
 go run ./cmd/recbook author le carre                 # more by them, and authors like them
+go run ./cmd/recbook foryou --available-now          # from everything I've finished
 
 go run ./cmd/recbook eval                            # how well it ranks books I finished
 go run ./cmd/recbook suite                           # rerun the saved queries; what changed
@@ -107,10 +108,20 @@ then reorders the top 100 by maximal marginal relevance, trading closeness
 to the seeds for distance from what's already listed; `eval --diversity`
 measures what that costs.
 
+`foryou` recommends from every book I've finished at once. Fusing four
+hundred seeds by reciprocal rank rewards breadth: the top fills with
+surveys that every seed lists somewhere, and forty-odd philosophy seeds
+vote as one block. So the seeds are first put into groups that read alike
+(leader clustering on content vectors less their mean), each group is
+fused alone, and the groups take turns at the list in proportion to their
+weight. `build` makes the list, since it ranks the catalog for every
+finished book; `foryou` and the web app read it with current availability.
+
 ## Web app
 
 `recbook serve` runs a private web app on 127.0.0.1:8484. It has search as
-you type, recommendations from seeds or "more like this", the backlog, and a
+you type, recommendations from seeds or "more like this", a "for you" list,
+the backlog, and a
 tracker with listening / finished / gave up / want buttons on every book.
 It reads the copy of the database that `build`, `embed` and the nightly job
 publish, and writes only `data/tracker.jsonl`, which the next build loads
@@ -158,7 +169,7 @@ and lists every problem.
 | `signals` | trusted dates, labels, provenance, signal tiers |
 | `library` | the one recording of each work to offer, and its availability |
 | `search` | keyword (BM25) search, and finding works by name |
-| `recommend` | books like a set of seeds, from the content and genre views |
+| `recommend` | books like a set of seeds, from the content and genre views; the "for you" list |
 | `authors` | who wrote what, each author's mean vector, and author queries |
 | `eval` | leave-one-out over finished books, against baselines; finish/give-up AUC |
 | `suite` | the saved query suite: its file, checks and run-to-run changes |

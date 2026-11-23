@@ -14,8 +14,10 @@
 //     is query by example, with the best query I could have made.
 //
 // The views (content, genre, and the blend of both) are ranked by the real
-// recommend code. Two baselines and chance rank the same books from the
-// same pool (baselines.sql), so the numbers have something to beat.
+// recommend code, and under history so is the "for you" list, which
+// groups the seeds by taste before fusing (recommend.ForYou). Two
+// baselines and chance rank the same books from the same pool
+// (baselines.sql), so the numbers have something to beat.
 //
 // Separately, Discriminate asks whether resemblance to the books I finished
 // tells the books I borrowed and finished from those I gave up on
@@ -28,7 +30,10 @@ import (
 	_ "embed"
 	"fmt"
 	"math"
+	"runtime"
 	"slices"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/KevinNavarreteParra/recbook/internal/embed"
 	"github.com/KevinNavarreteParra/recbook/internal/recommend"
@@ -43,10 +48,11 @@ var (
 )
 
 // The protocols and methods, in the order they're reported. baselines.sql
-// uses the same names.
+// uses the same names. "for you" is a history method only: with one seed
+// it would be the blend.
 var (
 	Protocols = []string{"history", "one seed"}
-	Methods   = []string{"content", "genre", "blend", "same author", "same shelf", "random"}
+	Methods   = []string{"content", "genre", "blend", "for you", "same author", "same shelf", "random"}
 )
 
 // Cutoffs are the list lengths hit rates are reported at. The CLI shows 20
@@ -60,6 +66,9 @@ type Options struct {
 	Unweighted bool            // count every seed equally, ignoring tiers
 	PerAuthor  int             // as in recommend.Options; 0 for no cap
 	Diversity  float64         // as in recommend.Options; 0 for none
+	// GroupThreshold is how alike seeds must be to share a group in the
+	// "for you" method; 0 means recommend.GroupThreshold.
+	GroupThreshold float64
 	// MaxRank is how deep the history protocol looks; a book ranked below
 	// it counts as missed. 0 means 1000. The one-seed protocol looks as
 	// deep as a seed's ranking goes, recommend.PerSeed.
@@ -164,6 +173,9 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 	if opts.Blend == nil {
 		opts.Blend = recommend.DefaultBlend
 	}
+	if opts.GroupThreshold == 0 {
+		opts.GroupThreshold = recommend.GroupThreshold
+	}
 
 	finished, targets, err := loadFinished(ctx, st, opts.Model)
 	if err != nil {
@@ -191,7 +203,10 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 	rep := &Report{Seeds: seeds, Finished: len(finished), Pool: pool, Targets: targets, Borrows: borrows}
 	for _, p := range Protocols {
 		for _, m := range Methods {
-			got := results[p][m]
+			got, ok := results[p][m]
+			if !ok {
+				continue // not a method of this protocol
+			}
 			if len(got) != len(targets) {
 				return nil, fmt.Errorf("%s / %s ranked %d of %d targets", p, m, len(got), len(targets))
 			}
@@ -273,6 +288,13 @@ func rankViews(ctx context.Context, st *store.Store, finished []int64, targets [
 		results.set("one seed", m.method, f.oneSeed(weighed))
 	}
 
+	mean, err := recommend.LoadMean(ctx, st, opts.Model)
+	if err != nil {
+		return 0, err
+	}
+	weighed := recommend.Weigh(rankings, recommend.Options{Views: opts.Blend, Unweighted: opts.Unweighted})
+	results.set("history", "for you", f.forYou(weighed, seeds, mean))
+
 	seeded := map[int64]bool{}
 	for _, r := range rankings {
 		seeded[r.Seed.WorkID] = true
@@ -332,6 +354,52 @@ func (f fusion) history(rankings []recommend.Ranking) []outcome {
 		}
 		out[i] = f.rank(t.WorkID, pos, f.opts.MaxRank)
 	}
+	return out
+}
+
+// forYou ranks each target in the "for you" list made from every other
+// seed: grouped by taste, each group fused alone, and the groups
+// interleaved, as recommend.ForYou does. Targets are ranked in parallel,
+// since each is grouped and fused afresh.
+func (f fusion) forYou(rankings []recommend.Ranking, seeds []recommend.Seed, mean []float32) []outcome {
+	ranked := map[int64]bool{}
+	for _, r := range rankings {
+		ranked[r.Seed.WorkID] = true
+	}
+	var compared []recommend.Seed // seeds with a ranking in the blend's views
+	for _, s := range seeds {
+		if ranked[s.WorkID] {
+			if f.opts.Unweighted {
+				s.Weight = 1
+			}
+			compared = append(compared, s)
+		}
+	}
+
+	out := make([]outcome, len(f.targets))
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	for i, t := range f.targets {
+		g.Go(func() error {
+			var rest []recommend.Seed
+			for _, s := range compared {
+				if s.WorkID != t.WorkID {
+					rest = append(rest, s)
+				}
+			}
+			var pos []recommend.Ranking
+			for _, r := range rankings {
+				if r.Seed.WorkID != t.WorkID {
+					pos = append(pos, holdOut(r, t.WorkID, f.isFinished))
+				}
+			}
+			groups := recommend.GroupSeeds(rest, mean, f.opts.GroupThreshold)
+			recs := recommend.FuseGroups(groups, pos, nil, recommend.Options{PerAuthor: f.opts.PerAuthor, Limit: f.opts.MaxRank})
+			out[i] = rankOf(t.WorkID, recs)
+			return nil
+		})
+	}
+	g.Wait()
 	return out
 }
 

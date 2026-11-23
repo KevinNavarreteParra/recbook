@@ -83,6 +83,10 @@ func build(ctx context.Context, st *store.Store, g *globals, out io.Writer) erro
 	if err := authors.Build(ctx, st); err != nil {
 		return err
 	}
+	// Last, since it ranks the catalog for every finished book (a minute).
+	if err := recommend.BuildForYou(ctx, st, g.languages()); err != nil {
+		return err
+	}
 	if err := st.Snapshot(ctx, g.servePath()); err != nil {
 		return fmt.Errorf("publishing for the web app: %w", err)
 	}

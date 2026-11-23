@@ -1,6 +1,6 @@
 // Package web is recbook's private web app: keyword search, "more like
-// this", recommendations from seeds, author pages, the backlog, and a
-// tracker for what I'm listening to. Pages are server-rendered Go
+// this", recommendations from seeds or from my whole history ("for you"),
+// author pages, the backlog, and a tracker for what I'm listening to. Pages are server-rendered Go
 // templates; htmx swaps in results without full reloads.
 //
 // The app never writes the main database. It reads the copy that `build`
@@ -31,7 +31,7 @@ var staticFiles embed.FS
 
 // pages are the templates that render a whole page; each defines "content"
 // inside the shared layout.
-var pages = []string{"search", "recommend", "backlog", "listened", "author"}
+var pages = []string{"search", "recommend", "foryou", "backlog", "listened", "author"}
 
 // templateFuncs are the helpers templates can call.
 var templateFuncs = template.FuncMap{
@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /search", s.searchPage)
 	mux.HandleFunc("GET /recommend", s.recommendPage)
 	mux.HandleFunc("GET /similar", s.recommendPage)
+	mux.HandleFunc("GET /foryou", s.forYouPage)
 	mux.HandleFunc("GET /seeds", s.seedOptions)
 	mux.HandleFunc("GET /seed-chip", s.seedChip)
 	mux.HandleFunc("GET /backlog", s.backlogPage)

@@ -11,18 +11,22 @@
 </label>
 {{end}}
 
+{{define "length-select"}}
+<label>length
+  <select name="len">
+    <option value=""{{if eq . ""}} selected{{end}}>any</option>
+    <option value="short"{{if eq . "short"}} selected{{end}}>under 6h</option>
+    <option value="medium"{{if eq . "medium"}} selected{{end}}>6–12h</option>
+    <option value="long"{{if eq . "long"}} selected{{end}}>over 12h</option>
+  </select>
+</label>
+{{end}}
+
 {{define "filters"}}
 <div class="filters">
   <label><input type="checkbox" name="now" value="1"{{if .AvailableNow}} checked{{end}}> available now</label>
   {{template "wait-select" .MaxWait}}
-  <label>length
-    <select name="len">
-      <option value=""{{if eq .Length ""}} selected{{end}}>any</option>
-      <option value="short"{{if eq .Length "short"}} selected{{end}}>under 6h</option>
-      <option value="medium"{{if eq .Length "medium"}} selected{{end}}>6–12h</option>
-      <option value="long"{{if eq .Length "long"}} selected{{end}}>over 12h</option>
-    </select>
-  </label>
+  {{template "length-select" .Length}}
   <label><input type="checkbox" name="read" value="1"{{if .IncludeRead}} checked{{end}}> include books I've read</label>
 </div>
 {{end}}

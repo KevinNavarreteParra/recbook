@@ -83,6 +83,9 @@ func app(t *testing.T) (*httptest.Server, string) {
 	if err := authors.Build(ctx, st); err != nil {
 		t.Fatal(err)
 	}
+	if err := recommend.BuildForYou(ctx, st, []string{"en"}); err != nil {
+		t.Fatal(err)
+	}
 	snapshot := filepath.Join(dir, "serve.duckdb")
 	if err := st.Snapshot(ctx, snapshot); err != nil {
 		t.Fatal(err)
@@ -178,6 +181,21 @@ func TestRecommendPage(t *testing.T) {
 	page := get(t, ts, "/similar?seed="+id)
 	if !strings.Contains(page, "like Tinker Tailor Soldier Spy") || !strings.Contains(page, `name="seed" value="`+id+`"`) {
 		t.Errorf("recommendations should say why, and keep the seed chosen:\n%s", page)
+	}
+}
+
+func TestForYouPage(t *testing.T) {
+	ts, _ := app(t)
+	page := get(t, ts, "/foryou")
+	if !strings.Contains(page, "finished books in") || !strings.Contains(page, `<div class="why">like `) {
+		t.Errorf("the for-you page should list recommendations, saying why, and its groups:\n%s", page)
+	}
+	if strings.Contains(page, "El topo") || strings.Contains(page, ">Tinker Tailor Soldier Spy<") {
+		t.Errorf("for you should show only unread recordings in my languages:\n%s", page)
+	}
+	partial := get(t, ts, "/foryou?now=1", "HX-Request", "true", "HX-Target", "results")
+	if strings.Contains(partial, "<html") || strings.Contains(partial, "~") {
+		t.Errorf("an htmx request should render only results, and now=1 only books available now:\n%s", partial)
 	}
 }
 
