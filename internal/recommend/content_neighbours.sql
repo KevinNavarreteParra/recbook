@@ -3,11 +3,10 @@
 SELECT
     b.work_id, b.title_id, b.title, b.author, b.narrator, b.duration_min, b.abridged,
     b.available, b.wait_days, b.holds, b.url, s.tier,
-    list_inner_product(e.vector, $seed::FLOAT[]) AS similarity
+    list_inner_product(v.vector, $seed::FLOAT[]) AS similarity
 FROM borrowable b
-JOIN work_text t USING (work_id)
-JOIN embedding e ON e.model = $model AND e.text_hash = t.text_hash
-LEFT JOIN work_signal s USING (work_id)
+JOIN work_vector v ON v.model = $model AND v.work_id = b.work_id
+LEFT JOIN work_signal s ON s.work_id = b.work_id
 WHERE NOT list_contains($exclude::BIGINT[], b.work_id)
   AND ($include_read OR NOT coalesce(s.finished, false))
   AND (b.available OR NOT $available_now)

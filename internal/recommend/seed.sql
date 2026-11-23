@@ -14,5 +14,5 @@ SELECT
 FROM work w
 LEFT JOIN work_signal s USING (work_id)
 LEFT JOIN work_text t USING (work_id)
-LEFT JOIN embedding e ON e.model = $model AND e.text_hash = t.text_hash
+LEFT JOIN work_vector e ON e.model = $model AND e.work_id = w.work_id
 WHERE w.work_id = $work_id

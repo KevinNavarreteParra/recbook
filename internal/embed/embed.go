@@ -7,6 +7,10 @@
 // committing after every batch. Stopping it partway (the context is
 // cancelled, or Between returns an error) loses at most one batch, and the
 // next run carries on from there.
+//
+// Both rebuild work_vector, each work's vector (work_vector.sql), which is
+// what queries read: WriteTexts because works are renumbered, Run because
+// works gain vectors.
 package embed
 
 import (
@@ -29,6 +33,8 @@ var (
 	workTextSQL string
 	//go:embed pending.sql
 	pendingSQL string
+	//go:embed work_vector.sql
+	workVectorSQL string
 )
 
 // DefaultModel and DefaultPrefix are the embedding model and the task
@@ -152,10 +158,17 @@ func Run(ctx context.Context, st *store.Store, e Embedder, opts Options) (Report
 		}
 	}
 	rep.Left = len(todo) - rep.Embedded
+	if rep.Embedded > 0 {
+		// A cancelled context can't run the rebuild; the next run or build will.
+		if err := st.RunScript(context.WithoutCancel(ctx), workVectorSQL, nil); err != nil {
+			return rep, fmt.Errorf("work vectors: %w", err)
+		}
+	}
 	return rep, nil
 }
 
-// WriteTexts chooses and cleans each work's text and rebuilds work_text.
+// WriteTexts chooses and cleans each work's text and rebuilds work_text,
+// and work_vector from it.
 // A description in one of languages (nil for any) is chosen over one in
 // another language (describe.sql).
 func WriteTexts(ctx context.Context, st *store.Store, languages []string) (Texts, error) {
@@ -213,7 +226,13 @@ func WriteTexts(ctx context.Context, st *store.Store, languages []string) (Texts
 		}
 		return nil
 	})
-	return t, err
+	if err != nil {
+		return t, err
+	}
+	if err := st.RunScript(ctx, workVectorSQL, nil); err != nil {
+		return t, fmt.Errorf("work vectors: %w", err)
+	}
+	return t, nil
 }
 
 // pending is a text the cache doesn't hold yet.
