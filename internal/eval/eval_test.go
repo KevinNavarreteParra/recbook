@@ -3,6 +3,7 @@ package eval
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +80,7 @@ func setup(t *testing.T) *store.Store {
 	titles, avail := demo.Catalog()
 	for i := range titles {
 		titles[i].Description = demo.Blurbs[titles[i].ID]
+		titles[i].Subjects = demo.Subjects[titles[i].ID]
 	}
 	if err := st.SaveCatalog(ctx, demo.Library, titles, avail, time.Now()); err != nil {
 		t.Fatal(err)
@@ -170,5 +172,64 @@ func TestRunDiversified(t *testing.T) {
 	}
 	if len(rep.Results) != len(Protocols)*len(Methods) {
 		t.Fatalf("%d results, want one per protocol and method", len(rep.Results))
+	}
+}
+
+func TestAUC(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		scores   []float64
+		positive []bool
+		want     float64
+	}{
+		{"perfect", []float64{1, 2, 3, 4}, []bool{false, false, true, true}, 1},
+		{"backwards", []float64{1, 2, 3, 4}, []bool{true, true, false, false}, 0},
+		{"one swap", []float64{1, 2, 3, 4}, []bool{false, true, false, true}, 0.75},
+		{"all tied", []float64{5, 5, 5, 5}, []bool{false, true, false, true}, 0.5},
+	} {
+		if got := auc(c.scores, c.positive); math.Abs(got-c.want) > 1e-9 {
+			t.Errorf("%s: auc = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if got := midranks([]float64{3, 1, 3, 2}); !slices.Equal(got, []float64{3.5, 1, 3.5, 2}) {
+		t.Errorf("midranks = %v", got)
+	}
+}
+
+func TestDiscriminate(t *testing.T) {
+	d, err := Discriminate(context.Background(), setup(t), Options{Model: embed.DefaultModel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The demo loans: The Hunt for Red October and The Spy Who Came in
+	// from the Cold, finished; The Da Vinci Code, returned early; and The
+	// Silent Patient, whose loan ran out.
+	if d.Finished != 2 || d.GaveUp != 2 || d.Lapsed != 1 {
+		t.Errorf("finished %d, gave up %d (%d lapsed); want 2, 2 (1)", d.Finished, d.GaveUp, d.Lapsed)
+	}
+	if len(d.Scores) != len(BorrowMethods) {
+		t.Fatalf("%d scores, want one per method", len(d.Scores))
+	}
+	auc := map[string]BorrowScore{}
+	for _, s := range d.Scores {
+		auc[s.Method] = s
+	}
+	// Same author: only The Spy Who Came in from the Cold has another
+	// finished book by its author (Tinker Tailor), so it beats both books
+	// I gave up on, and The Hunt for Red October ties with both: (1 + 1 +
+	// 0.5 + 0.5) / 4.
+	if got := auc["same author"]; got.AUC != 0.75 || got.Scored != 4 {
+		t.Errorf("same author: AUC %v over %d borrows, want 0.75 over 4", got.AUC, got.Scored)
+	}
+	// Only the finished two have descriptions, so content can't compare a
+	// finished borrow with a given-up one, and the blend falls back on
+	// genre for the rest.
+	if got := auc["content"]; !math.IsNaN(got.AUC) || got.Scored != 2 {
+		t.Errorf("content: AUC %v over %d borrows, want NaN over 2", got.AUC, got.Scored)
+	}
+	for _, m := range []string{"genre", "blend"} {
+		if got := auc[m]; got.Scored != 3 || got.AUC < 0 || got.AUC > 1 {
+			t.Errorf("%s: AUC %v over %d borrows, want one over 3", m, got.AUC, got.Scored)
+		}
 	}
 }

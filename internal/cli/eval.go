@@ -31,7 +31,10 @@ func newEvalCmd(g *globals) *cobra.Command {
 			"baselines (books by authors I've finished; books on the shelves I read\n" +
 			"most from) and with chance.\n\n" +
 			"hit@N is the share of held-out books ranked in the top N; MRR is the mean\n" +
-			"of 1/rank. Baselines tie a lot, so theirs are expected values. Each book's\n" +
+			"of 1/rank. Baselines tie a lot, so theirs are expected values. Then each\n" +
+			"book I borrowed is scored by how much it resembles the other books I\n" +
+			"finished, and AUC says how well that tells the borrows I finished from those\n" +
+			"I gave up on: 0.5 is chance, 1 a perfect split. Each book's\n" +
 			"ranks go to <data dir>/review/loo.csv, to compare runs. Needs `recbook\n" +
 			"build` and `recbook embed`; it reads the database only.",
 		Args: cobra.NoArgs,
@@ -78,6 +81,23 @@ func newEvalCmd(g *globals) *cobra.Command {
 				}
 				fmt.Fprintln(out)
 			}
+
+			b := rep.Borrows
+			fmt.Fprintf(out, "finished or gave up: the %d borrows I finished against the %d I didn't (%d of them\n", b.Finished, b.GaveUp, b.Lapsed)
+			fmt.Fprintln(out, "just ran out), told apart by how much each resembles the other books I finished")
+			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', tabwriter.AlignRight)
+			fmt.Fprintln(tw, "method\tAUC\tscored\t")
+			for _, s := range b.Scores {
+				auc := fmt.Sprintf("%.3f", s.AUC)
+				if math.IsNaN(s.AUC) {
+					auc = "-" // it scored only one kind of borrow
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%d\t\n", s.Method, auc, s.Scored)
+			}
+			if err := tw.Flush(); err != nil {
+				return err
+			}
+			fmt.Fprintln(out)
 
 			file := filepath.Join(g.dataDir(), "review", "loo.csv")
 			if err := writeRanks(file, rep); err != nil {

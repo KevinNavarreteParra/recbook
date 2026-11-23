@@ -16,6 +16,10 @@
 // The views (content, genre, and the blend of both) are ranked by the real
 // recommend code. Two baselines and chance rank the same books from the
 // same pool (baselines.sql), so the numbers have something to beat.
+//
+// Separately, Discriminate asks whether resemblance to the books I finished
+// tells the books I borrowed and finished from those I gave up on
+// (discriminate.go).
 package eval
 
 import (
@@ -69,6 +73,7 @@ type Report struct {
 	Pool     int // unread works that could be recommended
 	Results  []Result
 	Targets  []Target
+	Borrows  *Discrimination
 }
 
 // Result is how one method did under one protocol, over every target.
@@ -178,7 +183,12 @@ func Run(ctx context.Context, st *store.Store, opts Options) (*Report, error) {
 		return nil, err
 	}
 
-	rep := &Report{Seeds: seeds, Finished: len(finished), Pool: pool, Targets: targets}
+	borrows, err := Discriminate(ctx, st, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	rep := &Report{Seeds: seeds, Finished: len(finished), Pool: pool, Targets: targets, Borrows: borrows}
 	for _, p := range Protocols {
 		for _, m := range Methods {
 			got := results[p][m]
