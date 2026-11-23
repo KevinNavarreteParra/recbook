@@ -20,11 +20,13 @@ import (
 
 // Title returns the key for a whole title, subtitle included. It lowercases,
 // folds accents to ASCII, and drops bracketed notes ("(Unabridged)",
-// "(Jack Ryan, #1)"), a trailing "A Novel", a leading article, and
-// punctuation.
+// "(Jack Ryan, #1)"), notes of the edition ("10th Anniversary Edition",
+// "Revised and Expanded", "with eBook"), a trailing "A Novel", a leading
+// article, and punctuation.
 func Title(title string) string {
 	s := fold(title)
 	s = bracketed.ReplaceAllString(s, " ")
+	s = editionNote.ReplaceAllString(s, " ")
 	s = aNovel.ReplaceAllString(s, "")
 	s = strings.ReplaceAll(s, "&", " and ")
 	return dropLeadingArticle(words(s))
@@ -219,7 +221,11 @@ func IsPlaceholderAuthor(key string) bool {
 var (
 	bracketed = regexp.MustCompile(`\([^)]*\)|\[[^\]]*\]`)
 	aNovel    = regexp.MustCompile(`[\s:,.-]*\ba novel\s*$`)
-	nonAlnum  = regexp.MustCompile(`[^a-z0-9]+`)
+	// editionNote names an edition rather than the book. Each is a phrase
+	// no title means otherwise; "New Edition" alone could.
+	editionNote = regexp.MustCompile(`\b((\d+(st|nd|rd|th)|\w+th)[\s-]+)?anniversary edition\b|` +
+		`\brevised and (expanded|updated)( edition)?\b|\b(revised|expanded|updated|deluxe|special)\s+edition\b|\bwith ebook\b`)
+	nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 
 	// suffixes that can follow a name: generations, degrees, and a
 	// service's retired officers. "ma", "ms" and "do" are left out: Yo-Yo

@@ -17,6 +17,12 @@ func TestTitle(t *testing.T) {
 		{"Ethics: Demonstrated in Geometrical Order", "ethics demonstrated in geometrical order"},
 		{"Beloved: A Novel", "beloved"},
 		{"Novel Ideas", "novel ideas"}, // "novel" only goes when it's "a novel" at the end
+		{"What If? 10th Anniversary Edition", "what if"},
+		{"Freakonomics Revised and Expanded", "freakonomics"},
+		{"The Art of War, with eBook", "art of war"},
+		{"Fahrenheit 451: Sixtieth Anniversary Edition", "fahrenheit 451"},
+		{"The Hobbit: Deluxe Edition", "hobbit"},
+		{"The Master and Margarita 50th-Anniversary Edition (Penguin Classics Deluxe Edition)", "master and margarita"},
 	}
 	for _, tt := range tests {
 		if got := Title(tt.in); got != tt.want {
